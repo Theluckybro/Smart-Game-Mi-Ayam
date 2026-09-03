@@ -67,5 +67,5 @@
         "*.sln": "*.csproj",
         "*.slnx": "*.csproj"
     },
-    "dotnet.defaultSolution": "GameCerdas_Praktikum01_NPCDetector.slnx"
+    "dotnet.defaultSolution": "Smart-Game-Assignment-01.slnx"
 }
