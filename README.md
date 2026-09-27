@@ -1,4 +1,4 @@
-# Smart Game — Kumpulan Praktikum
+# Smart Game: Kumpulan Praktikum
 
 Mata Kuliah **Game Cerdas** — S1 Teknik Informatika, Semester 7
 Unity **6000.3.23f1**
