@@ -1,0 +1,399 @@
+# Penjelasan Kode — Dungeon Hunter (Progress 1)
+
+Dokumen ini menjelaskan kegunaan setiap class dan fitur yang sudah ada.
+Semua script berada di `Assets/_DungeonHunter/`.
+
+## Daftar isi
+
+1. [Gambaran arsitektur](#1-gambaran-arsitektur)
+2. [Core — sistem dasar game](#2-core--sistem-dasar-game)
+3. [Player](#3-player)
+4. [AI — inti mata kuliah](#4-ai--inti-mata-kuliah)
+5. [Gameplay — objective](#5-gameplay--objective)
+6. [DebugTools — AI Debug Mode](#6-debugtools--ai-debug-mode)
+7. [Editor — pembuat scene](#7-editor--pembuat-scene)
+8. [Ringkasan fitur](#8-ringkasan-fitur)
+
+---
+
+## 1. Gambaran arsitektur
+
+Setiap frame, enemy menjalankan urutan berikut:
+
+```text
+Perception ──► Memory ──► Decision (FSM) ──► Navigation (NavMesh) + Steering (Separation)
+```
+
+Hubungan antar class:
+
+```text
+EnemyAI (abstract, FSM)
+ ├── MeleeEnemy   → Melee AI
+ └── RangedEnemy  → Ranged AI + Maintain Distance ──► Projectile
+
+EnemyAI memakai: AIPerception, AIMemory, Health, HitFlash, NavMeshAgent
+
+ProximityInteractable (abstract)
+ ├── KeyPickup
+ ├── LockedDoor
+ └── ArtifactPickup
+```
+
+Struktur folder:
+
+```text
+Assets/_DungeonHunter/
+├── Editor/
+│   └── DungeonSceneBuilder.cs
+└── Scripts/
+    ├── AI/          AIPerception, AIMemory, EnemyAI, MeleeEnemy, RangedEnemy, Projectile
+    ├── Core/        Health, NoiseSystem, HitFlash, GameManager, GameHUD
+    ├── DebugTools/  AIDebugManager, EnemyDebugVisual
+    ├── Gameplay/    ProximityInteractable, KeyPickup, LockedDoor, ArtifactPickup
+    └── Player/      PlayerController, PlayerCombat, TopDownCamera
+```
+
+---
+
+## 2. Core — sistem dasar game
+
+### `Health`
+`Scripts/Core/Health.cs`
+
+Menyimpan HP. Dipakai oleh player dan enemy.
+
+- `TakeDamage(jumlah, posisiSumber)` dan `Heal(jumlah)`
+- Event `Damaged` dan `Died`, supaya class lain bisa bereaksi saat kena damage atau mati
+
+### `NoiseSystem`
+`Scripts/Core/NoiseSystem.cs`
+
+Sistem suara untuk AI pendengaran (Hearing).
+
+- Player memancarkan suara berupa posisi dan radius lewat `NoiseSystem.Emit(...)`
+- Enemy yang berada di dalam radius itu akan "mendengar"
+
+### `HitFlash`
+`Scripts/Core/HitFlash.cs`
+
+Feedback visual dengan mengubah warna badan sementara.
+
+- Putih saat kena damage
+- Dipakai juga sebagai tanda serangan enemy: **kuning** saat melee ancang-ancang, **oranye** saat archer membidik
+
+### `GameManager`
+`Scripts/Core/GameManager.cs`
+
+Mengatur alur game.
+
+- Status game: `Playing`, `Won`, `Lost`
+- Progres objective: Key sudah didapat atau belum, pintu sudah terbuka atau belum
+- Teks objective dan pesan di layar
+- Jumlah kill dan timer
+- Tombol **R** untuk restart setelah menang atau kalah
+
+### `GameHUD`
+`Scripts/Core/GameHUD.cs`
+
+Tampilan layar (sementara memakai IMGUI).
+
+- Bar HP, objective, status Key, kill, waktu
+- Pesan objective di tengah atas layar
+- Layar berkedip merah saat player kena damage
+- Bar HP kecil di atas enemy yang sudah terluka
+- Layar **VICTORY** / **DEFEAT**
+
+---
+
+## 3. Player
+
+### `PlayerController`
+`Scripts/Player/PlayerController.cs`
+
+- **WASD** untuk bergerak, **Shift** untuk sprint
+- Karakter menghadap ke arah mouse
+- Langkah kaki memancarkan suara:
+
+| Gerakan | Radius suara |
+|---|---|
+| Jalan | 2.5 m |
+| Sprint | 8 m |
+
+Akibatnya, sprint lebih mudah ketahuan enemy.
+
+### `PlayerCombat`
+`Scripts/Player/PlayerCombat.cs`
+
+- Serangan pedang dengan **klik kiri** atau **Space**
+- Mengenai semua enemy dalam busur **120°** di depan, jangkauan **2.3 m**, damage **25**
+- Ada animasi ayunan pedang
+- Setiap serangan memancarkan suara (radius 9 m)
+
+### `TopDownCamera`
+`Scripts/Player/TopDownCamera.cs`
+
+Kamera dari atas yang mengikuti player.
+
+---
+
+## 4. AI
+
+### `AIPerception`
+`Scripts/AI/AIPerception.cs`
+
+"Sense" dari enemy.
+
+**Penglihatan** dicek bertahap:
+
+```text
+1. Jarak     → apakah player di dalam view radius?
+2. FOV       → apakah player di dalam sudut pandang?
+3. Line of Sight → raycast, apakah terhalang dinding?
+```
+
+- Enemy lain tidak menghalangi pandangan
+
+**Pendengaran**: menerima suara dari `NoiseSystem`.
+
+### `AIMemory`
+`Scripts/AI/AIMemory.cs`
+
+Ingatan enemy.
+
+- **Last Known Position** (posisi terakhir player yang diketahui)
+- Kapan terakhir melihat player
+- Sumber info: `Vision`, `Hearing`, atau `Damage`
+- Ingatan otomatis hilang setelah 12 detik tanpa update
+
+### `EnemyAI`
+`Scripts/AI/EnemyAI.cs`
+
+Class dasar (abstract) semua enemy, berupa **Finite State Machine**.
+
+**State:**
+
+| State | Arti |
+|---|---|
+| `Patrol` | Patroli waypoint. Kalau tidak punya waypoint, berjaga di pos sambil menoleh kiri-kanan |
+| `Investigate` | Berjalan ke Last Known Position / sumber suara |
+| `Search` | Mencari di titik-titik acak sekitar Last Known Position |
+| `Chase` | Mengejar player yang terlihat |
+| `Attack` | Menyerang |
+| `Reposition` | Mundur untuk menjaga jarak |
+| `Dead` | Badan jatuh lalu dinonaktifkan |
+
+**Perilaku umum:**
+
+- Kalau diserang dari belakang, enemy langsung memeriksa arah datangnya serangan
+- **Steering Separation**: enemy saling menjauh supaya tidak bertumpuk
+- Menyimpan data untuk debug: State, `Reason` (alasan keputusan), tujuan gerak, dan path
+
+### `MeleeEnemy`
+`Scripts/AI/MeleeEnemy.cs`
+
+**Melee AI** - Skeleton Warrior (×2).
+
+- Mengejar player sampai jarak **1.8 m**, lalu menyerang
+- Ancang-ancang **0.35 detik** (berkedip kuning) sebelum memukul
+- Damage hanya masuk kalau player masih di depan dan masih dalam jangkauan, jadi serangannya bisa dihindari
+
+FSM Melee:
+
+![FSM Melee AI](Docs/images/fsm_melee.png)
+
+### `RangedEnemy`
+`Scripts/AI/RangedEnemy.cs`
+
+**Ranged AI + Maintain Distance** - Skeleton Archer (×3).
+
+Perilaku berdasarkan jarak ke player:
+
+| Jarak ke player | State | Perilaku |
+|---|---|---|
+| > 9 m | `Chase` | Mendekat |
+| 5–9 m | `Attack` | Berhenti, membidik 0.45 detik, lalu menembak |
+| < 5 m | `Reposition` | Mundur sambil tetap menghadap player |
+
+Cara memilih posisi mundur:
+
+- Mengevaluasi **7 arah × 2 jarak langkah** di NavMesh
+- Memilih titik yang paling jauh dari player dan bisa dicapai
+- Sudut menyamping membuat archer bisa bergeser menyusuri dinding saat di pojok
+
+Kalau tidak ada ruang untuk mundur, archer dianggap **terpojok**: tetap menembak, lalu mencoba mundur lagi setelah 2 detik.
+
+FSM Ranged:
+
+![FSM Ranged AI](Docs/images/fsm_ranged.png)
+
+### `Projectile`
+`Scripts/AI/Projectile.cs`
+
+Panah / peluru archer.
+
+- Bergerak lurus
+- Menembus sesama enemy
+- Hancur saat mengenai dinding
+- Memberi damage ke player
+
+---
+
+## 5. Gameplay
+
+### `ProximityInteractable`
+`Scripts/Gameplay/ProximityInteractable.cs`
+
+Class dasar untuk objek yang aktif saat player mendekat (cek jarak, tanpa physics trigger). Juga membuat visualnya melayang dan berputar.
+
+### `KeyPickup`
+`Scripts/Gameplay/KeyPickup.cs`
+
+Dungeon Key. Didapat begitu player mendekat.
+
+### `LockedDoor`
+`Scripts/Gameplay/LockedDoor.cs`
+
+Pintu ruang Artifact.
+
+- Tanpa Key: muncul pesan "Pintu terkunci"
+- Dengan Key: pintu turun ke lantai dan NavMesh di situ terbuka (lewat `NavMeshObstacle` carve)
+- Membuka pintu menimbulkan suara keras (radius 12 m)
+
+### `ArtifactPickup`
+`Scripts/Gameplay/ArtifactPickup.cs`
+
+Ancient Artifact. Diambil → **WIN**.
+
+Alur gameplay:
+
+![Alur gameplay](Docs/images/alur_gameplay.png)
+
+---
+
+## 6. DebugToolsMode
+
+Tekan **F1** untuk menyalakan/mematikan.
+
+### `AIDebugManager`
+`Scripts/DebugTools/AIDebugManager.cs`
+
+Menampilkan panel di atas setiap enemy, berisi:
+
+- Nama dan HP
+- **State** dan **Why** (alasan keputusan)
+- Target
+- **Can See**, beserta alasannya kalau tidak melihat
+- Distance
+- Destination
+- Path
+- Last Known Position beserta sumber infonya
+
+Contoh panel (screenshot dari game, tekan **F1**):
+
+![Contoh panel AI Debug Mode](Docs/images/debug_panel.png)
+
+| Baris | Arti |
+|---|---|
+| `State : INVESTIGATE` | Archer sedang menuju posisi terakhir player |
+| `Why : Kehilangan Line of Sight` | Alasan pindah state: player tadi terlihat lalu hilang dari pandangan |
+| `Can See : FALSE (luar FOV)` | Player dalam radius pandang, tetapi di luar sudut pandang (FOV) archer |
+| `Distance : 3.6` | Jarak ke player 3.6 m |
+| `Destination : Last Known Position` | Tujuan gerak NavMesh adalah LKP |
+| `Path : ACTIVE (PathComplete)` | Path NavMesh ke tujuan valid dan lengkap |
+| `Last Known : (51.1, 25.5) via Hearing` | LKP terakhir diperbarui dari suara langkah player |
+| `Range : 5-9m` | Zona Maintain Distance archer |
+
+Ada juga legenda warna di pojok kiri bawah layar.
+
+### `EnemyDebugVisual`
+`Scripts/DebugTools/EnemyDebugVisual.cs`
+
+Garis yang terlihat langsung di **Game view** (bukan hanya Scene view):
+
+| Garis | Warna |
+|---|---|
+| Field of View | Kuning, berubah **merah** saat melihat player |
+| Path NavMesh | Cyan |
+| Last Known Position | Magenta |
+| Attack range melee | Merah |
+| Batas jarak 5–9 m archer | Oranye |
+
+---
+
+## 7. Editor
+
+### `DungeonSceneBuilder`
+`Editor/DungeonSceneBuilder.cs`
+
+Membangun seluruh scene otomatis dari peta teks. Jalankan lewat menu **Dungeon Hunter → Build Prototype Scene**.
+
+Yang dibuat:
+
+- Lantai dan dinding
+- Bake NavMesh
+- Obor (lampu)
+- Player dan kamera
+- 2 Melee dan 3 Ranged
+- Key, pintu, Artifact
+- Material dan prefab Projectile
+
+Legenda peta (1 karakter = 1 kotak 2×2 m):
+
+| Karakter | Arti |
+|---|---|
+| `#` | Dinding |
+| `.` | Lantai |
+| `P` | Spawn player |
+| `M` | Melee enemy |
+| `R` | Ranged enemy |
+| `K` | Dungeon Key |
+| `D` | Pintu ruang Artifact |
+| `A` | Artifact |
+| `w` | Waypoint patroli |
+| `L` | Obor / lampu |
+
+Bentuk dungeon cukup diubah dengan mengedit peta teks di file itu, lalu menjalankan menu tersebut lagi.
+
+---
+
+## 8. Ringkasan fitur
+
+### Gameplay
+
+- Dungeon dengan 5 ruangan dan koridor, plus pilar sebagai penghalang pandangan
+- Player bisa bergerak, sprint, dan menyerang dengan pedang
+- Alur: cari Key → buka pintu → ambil Artifact → **WIN**; HP habis → **LOSE**; tekan **R** untuk main lagi
+- HUD, pesan objective, dan feedback saat kena damage
+
+### AI (materi Pertemuan 1–7)
+
+| Materi | Implementasi |
+|---|---|
+| Perception | Jarak, FOV, Line of Sight, pendengaran |
+| Memory | Last Known Position, masa kadaluarsa ingatan |
+| Decision | FSM dengan 7 state |
+| Movement | NavMesh + steering separation |
+| Tactical | Maintain Distance |
+| Debug | AI Debug Mode (F1): panel teks + garis visual |
+
+### Fokus AI Topik 3
+
+| Poin | Status |
+|---|---|
+| Melee AI | ✅ Selesai |
+| Ranged AI | ✅ Selesai |
+| Maintain Distance | ✅ Selesai |
+| Flee / Retreat | ⬜ Progress 2 |
+| Navigation (lanjutan) | ⬜ Progress 2 |
+| Guardian Behavior | ⬜ Progress 2 |
+
+### Kontrol
+
+| Input | Aksi |
+|---|---|
+| WASD | Bergerak |
+| Mouse | Arah hadap |
+| Klik kiri / Space | Serang |
+| Shift | Sprint (lebih berisik) |
+| F1 | AI Debug Mode |
+| R | Main lagi (setelah menang / kalah) |

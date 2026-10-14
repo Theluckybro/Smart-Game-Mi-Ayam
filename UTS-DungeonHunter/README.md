@@ -22,6 +22,11 @@ lalu mengambil **Ancient Artifact**. (Guardian menyusul di progress 2.)
 3. Kalau scene belum ada / ingin di-generate ulang: menu **Dungeon Hunter → Build Prototype Scene**.
    Layout level diatur lewat peta ASCII di `Assets/_DungeonHunter/Editor/DungeonSceneBuilder.cs`.
 
+## Dokumen
+
+- [PENJELASAN_KODE.md](PENJELASAN_KODE.md) — penjelasan tiap class & fitur
+- `Docs/diagrams/*.drawio` — sumber diagram (buka dengan draw.io), hasil export di `Docs/images/`
+
 ## Kontrol
 
 | Input | Aksi |
@@ -35,18 +40,7 @@ lalu mengambil **Ancient Artifact**. (Guardian menyusul di progress 2.)
 
 ## Gameplay loop
 
-```text
-START (ruang awal)
- ↓
-Explore hall → lawan Skeleton Warrior & Skeleton Archer
- ↓
-Ambil Dungeon Key (ruang timur, dijaga Archer)
- ↓
-Buka pintu ruang Artifact (utara, dijaga Archer)
- ↓
-Ambil Artifact → WIN   (progress 2: harus mengalahkan Guardian dulu)
-(HP player habis → LOSE)
-```
+![Alur gameplay](Docs/images/alur_gameplay.png)
 
 ## Arsitektur AI
 
@@ -72,23 +66,11 @@ Perception ──► Memory ──► Decision (FSM) ──► Navigation (NavMe
 
 ### FSM Melee
 
-```text
-PATROL ──lihat player──► CHASE ──dalam jangkauan──► ATTACK
-  ▲  └──dengar suara──► INVESTIGATE ◄──hilang LOS──┘
-  │                          │ sampai di LKP
-  └──── selesai mencari ─── SEARCH
-```
+![FSM Melee AI](Docs/images/fsm_melee.png)
 
 ### FSM Ranged (Maintain Distance)
 
-```text
-PATROL (sentry) ──lihat player──► CHASE ──jarak ≤ 9 m──► ATTACK (aim → shoot)
-                                    ▲                      │  ▲
-                         jarak > 10 m└──────────────────────┘  │ jarak ≥ 6.5 m
-                                                   jarak < 5 m ▼  │
-                                                          REPOSITION (mundur)
-hilang Line of Sight ──► INVESTIGATE ──► SEARCH ──► PATROL
-```
+![FSM Ranged AI](Docs/images/fsm_ranged.png)
 
 ## AI Debug Mode (F1)
 
