@@ -11,6 +11,7 @@ bukan satu project besar.
 |---|---|---|
 | [`Praktikum-01-NPCDetector`](Praktikum-01-NPCDetector) | Praktikum 1 | NPC Detector |
 | [`Praktikum-02-NPCGuard`](Praktikum-02-NPCGuard) | Praktikum 2 | NPC Guard: Sensor + Memory + Decision |
+| [`UTS-DungeonHunter`](UTS-DungeonHunter) | UTS (kelompok) | Topik 3 — Dungeon Hunter: Intelligent Enemy Dungeon |
 
 ## Kenapa dipisah per folder?
 
