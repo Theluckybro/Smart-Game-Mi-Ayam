@@ -11,8 +11,13 @@ namespace DungeonHunter
         Investigate, // menuju Last Known Position / sumber suara
         Search,      // mencari di sekitar Last Known Position
         Chase,       // mengejar player yang terlihat
-        Attack,      // menyerang (melee / menembak)
+        Attack,      // menyerang (melee / menembak / slam)
         Reposition,  // Maintain Distance (ranged)
+        Flee,        // Retreat ke titik aman saat HP rendah
+        Guard,       // Guardian berjaga di pos
+        Return,      // Guardian kembali ke pos (leash)
+        Enrage,      // Guardian masuk Phase 2
+        Charge,      // Guardian menerjang (Phase 2)
         Dead
     }
 
@@ -23,6 +28,7 @@ namespace DungeonHunter
     ///   Perception (vision + hearing) → Memory → Decision (FSM) → Navigation (NavMesh) + Steering (Separation)
     ///
     /// Subclass (Melee / Ranged) meng-override state tertentu.
+    /// Guardian meng-override UpdateState() dan memakai Behavior Tree.
     /// </summary>
     [RequireComponent(typeof(NavMeshAgent), typeof(AIPerception), typeof(AIMemory))]
     [RequireComponent(typeof(Health))]
@@ -47,6 +53,21 @@ namespace DungeonHunter
         [SerializeField] protected float investigateTimeout = 10f;
         [SerializeField] protected float searchDuration = 5f;
         [SerializeField] protected float searchRadius = 3.5f;
+        [SerializeField] protected float unreachableWaitTime = 2f;
+
+        [Header("Navigation")]
+        [Tooltip("Cost area 'Trap' khusus agent ini. Makin besar → makin menghindari jebakan.")]
+        [SerializeField] protected float trapAreaCost = 5f;
+        [SerializeField] protected float linkJumpHeight = 1.2f;
+        [SerializeField] protected float linkJumpSpeed = 6f;
+
+        [Header("Flee / Retreat")]
+        [SerializeField] protected bool canFlee = true;
+        [SerializeField, Range(0f, 1f)] protected float fleeHealthThreshold = 0.3f;
+        [SerializeField, Range(0f, 1f)] protected float recoverHealthThreshold = 0.7f;
+        [SerializeField] protected float fleeSpeed = 5f;
+        [SerializeField] protected float regenPerSecond = 8f;
+        [SerializeField] protected List<Transform> retreatPoints = new List<Transform>();
 
         [Header("Steering - Separation")]
         [SerializeField] protected float separationRadius = 1.6f;
@@ -69,6 +90,11 @@ namespace DungeonHunter
         private float waypointWaitTimer;
         private float nextSearchPointTime;
         private bool pendingInvestigate;
+        private bool hasFled;
+        private Transform currentRetreatPoint;
+        private float unreachableTimer;
+        private NavMeshPath scratchPath;
+        private NavMeshQueryFilter queryFilter;
 
         // ---- Data untuk AI Debug Mode ----
         public string DisplayName => displayName;
@@ -76,8 +102,12 @@ namespace DungeonHunter
         public string Reason { get; protected set; } = "";
         public Vector3 CurrentDestination { get; private set; }
         public bool HasDestination { get; private set; }
-        public string DestinationLabel { get; private set; } = "-";
+        public string DestinationLabel { get; protected set; } = "-";
         public Vector3 SeparationForce { get; private set; }
+        public bool IsTraversingLink { get; private set; }
+        public int LinksTraversed { get; private set; }
+        public Transform CurrentRetreatPoint => currentRetreatPoint;
+        public string RetreatInfo { get; private set; } = "";
         public NavMeshAgent Agent => agent;
         public AIPerception Perception => perception;
         public AIMemory Memory => memory;
@@ -86,10 +116,13 @@ namespace DungeonHunter
         public Vector3 HomePosition => homePosition;
         public virtual string ExtraDebugInfo => "";
 
-        public void Setup(string name, Transform player, List<Transform> patrolPoints)
+        public static int TrapArea { get; private set; } = 3;
+
+        public void Setup(string name, Transform player, List<Transform> patrolPoints, List<Transform> retreats)
         {
             displayName = name;
             waypoints = patrolPoints ?? new List<Transform>();
+            retreatPoints = retreats ?? new List<Transform>();
             SetTarget(player);
         }
 
@@ -109,9 +142,20 @@ namespace DungeonHunter
             memory = GetComponent<AIMemory>();
             health = GetComponent<Health>();
             hitFlash = GetComponent<HitFlash>();
+            scratchPath = new NavMeshPath();
 
             if (target == null && perception.Target != null)
                 SetTarget(perception.Target);
+
+            // ---- NAVIGATION: Area Cost & NavMeshLink ----
+            int trap = NavMesh.GetAreaFromName("Trap");
+            if (trap >= 0)
+                TrapArea = trap;
+            agent.SetAreaCost(TrapArea, trapAreaCost);
+            agent.autoTraverseOffMeshLink = false;
+
+            queryFilter = new NavMeshQueryFilter { agentTypeID = agent.agentTypeID, areaMask = NavMesh.AllAreas };
+            queryFilter.SetAreaCost(TrapArea, trapAreaCost);
         }
 
         protected virtual void OnEnable()
@@ -130,8 +174,11 @@ namespace DungeonHunter
         {
             homePosition = transform.position;
             homeRotation = transform.rotation;
-            EnterState(EnemyState.Patrol);
+            EnterState(InitialState);
+            State = InitialState;
         }
+
+        protected virtual EnemyState InitialState => EnemyState.Patrol;
 
         private void Update()
         {
@@ -156,11 +203,27 @@ namespace DungeonHunter
             // 2. MEMORY
             UpdateMemory();
 
-            // 3. DECISION — jalankan state FSM saat ini
+            // NAVIGATION: lompat lewat NavMeshLink (dikerjakan sendiri agar terlihat sebagai lompatan)
+            if (IsTraversingLink)
+                return;
+            if (agent.isOnOffMeshLink)
+            {
+                StartCoroutine(TraverseLinkRoutine());
+                return;
+            }
+
+            // 3. DECISION — transisi global berprioritas tinggi
+            if (ShouldFlee())
+            {
+                hasFled = true;
+                ChangeState(EnemyState.Flee, $"HP rendah ({health.Normalized:P0}) → retreat");
+            }
+
+            // 4. Jalankan state saat ini (FSM / Behavior Tree)
             stateTimer += Time.deltaTime;
             UpdateState(State);
 
-            // 4. STEERING — separation agar enemy tidak bertumpuk
+            // 5. STEERING — separation agar enemy tidak bertumpuk
             ApplySeparation();
         }
 
@@ -186,11 +249,13 @@ namespace DungeonHunter
                 return;
 
             memory.RememberDamage(source);
+            OnDamagedReaction();
+        }
 
+        protected virtual void OnDamagedReaction()
+        {
             if (State == EnemyState.Patrol || State == EnemyState.Search || State == EnemyState.Investigate)
-            {
                 ChangeState(EnemyState.Investigate, "Diserang → cek arah serangan");
-            }
         }
 
         // =====================================================
@@ -212,6 +277,7 @@ namespace DungeonHunter
         protected virtual void EnterState(EnemyState state)
         {
             agent.updateRotation = true;
+            unreachableTimer = 0f;
 
             switch (state)
             {
@@ -230,6 +296,10 @@ namespace DungeonHunter
                 case EnemyState.Chase:
                     agent.speed = chaseSpeed;
                     break;
+                case EnemyState.Flee:
+                    agent.speed = fleeSpeed;
+                    currentRetreatPoint = PickRetreatPoint();
+                    break;
                 case EnemyState.Dead:
                     OnDeath();
                     break;
@@ -238,6 +308,8 @@ namespace DungeonHunter
 
         protected virtual void ExitState(EnemyState state)
         {
+            if (state == EnemyState.Flee)
+                currentRetreatPoint = null;
         }
 
         protected virtual void UpdateState(EnemyState state)
@@ -250,6 +322,7 @@ namespace DungeonHunter
                 case EnemyState.Chase: UpdateChase(); break;
                 case EnemyState.Attack: UpdateAttack(); break;
                 case EnemyState.Reposition: UpdateReposition(); break;
+                case EnemyState.Flee: UpdateFlee(); break;
             }
         }
 
@@ -271,6 +344,13 @@ namespace DungeonHunter
             return false;
         }
 
+        protected bool ConsumePendingInvestigate()
+        {
+            bool value = pendingInvestigate;
+            pendingInvestigate = false;
+            return value;
+        }
+
         // =====================================================
         // STATES (default)
         // =====================================================
@@ -284,19 +364,7 @@ namespace DungeonHunter
 
             if (waypoints == null || waypoints.Count == 0)
             {
-                // Sentry: berjaga di posisi awal sambil melihat sekeliling
-                if (Vector3.Distance(transform.position, homePosition) > waypointTolerance)
-                {
-                    MoveTo(homePosition, "Pos jaga");
-                }
-                else
-                {
-                    StopMoving();
-                    DestinationLabel = "Pos jaga (look around)";
-                    float yaw = Mathf.Sin(Time.time * 0.6f) * 70f;
-                    transform.rotation = Quaternion.RotateTowards(transform.rotation,
-                        homeRotation * Quaternion.Euler(0f, yaw, 0f), 90f * Time.deltaTime);
-                }
+                UpdateSentry("Pos jaga");
                 return;
             }
 
@@ -310,6 +378,22 @@ namespace DungeonHunter
                     GoToCurrentWaypoint();
                 }
             }
+        }
+
+        /// <summary>Berjaga di posisi awal sambil melihat sekeliling.</summary>
+        protected void UpdateSentry(string label)
+        {
+            if (Vector3.Distance(transform.position, homePosition) > waypointTolerance)
+            {
+                MoveTo(homePosition, label);
+                return;
+            }
+
+            StopMoving();
+            DestinationLabel = label + " (look around)";
+            float yaw = Mathf.Sin(Time.time * 0.6f) * 70f;
+            transform.rotation = Quaternion.RotateTowards(transform.rotation,
+                homeRotation * Quaternion.Euler(0f, yaw, 0f), 90f * Time.deltaTime);
         }
 
         private void GoToCurrentWaypoint()
@@ -343,6 +427,14 @@ namespace DungeonHunter
             pendingInvestigate = false;
 
             MoveTo(memory.LastKnownPosition, "Last Known Position");
+
+            // NAVIGATION: Path Partial → LKP tidak bisa dicapai, tunggu di titik terdekat
+            if (HandleUnreachable(memory.LastKnownPosition, "Last Known Position tidak bisa dicapai"))
+            {
+                if (unreachableTimer >= unreachableWaitTime)
+                    ChangeState(EnemyState.Search, "Tidak ada jalur ke LKP → mencari di sekitar");
+                return;
+            }
 
             bool arrived = !agent.pathPending && agent.remainingDistance <= 1f;
             bool invalidPath = !agent.pathPending && agent.pathStatus == NavMeshPathStatus.PathInvalid;
@@ -390,6 +482,7 @@ namespace DungeonHunter
 
             Reason = "Player terlihat";
             MoveTo(target.position, "Player");
+            HandleUnreachable(target.position, "Player terlihat tapi tidak ada jalur");
         }
 
         protected virtual void UpdateAttack()
@@ -400,11 +493,108 @@ namespace DungeonHunter
         {
         }
 
+        // ---------------- FLEE / RETREAT ----------------
+
+        private bool ShouldFlee()
+        {
+            return canFlee && !hasFled
+                           && State != EnemyState.Flee && State != EnemyState.Dead
+                           && health.Normalized <= fleeHealthThreshold;
+        }
+
+        /// <summary>
+        /// Tactical + Navigation: pilih retreat point berdasarkan PANJANG PATH NavMesh, bukan garis lurus.
+        /// Titik dianggap aman jika enemy bisa sampai lebih dulu daripada player
+        /// (path enemy lebih pendek), lalu dipilih yang paling jauh dari player.
+        /// </summary>
+        private Transform PickRetreatPoint()
+        {
+            Transform best = null;
+            float bestScore = float.MinValue;
+            RetreatInfo = "tidak ada retreat point";
+
+            foreach (Transform p in retreatPoints)
+            {
+                if (p == null)
+                    continue;
+
+                float myLen = PathLength(transform.position, p.position);
+                if (float.IsInfinity(myLen))
+                    continue;
+
+                float playerLen = target != null ? PathLength(target.position, p.position) : 99f;
+                if (float.IsInfinity(playerLen))
+                    playerLen = 99f;
+
+                bool safe = playerLen > myLen + 2f;
+                float score = (safe ? 100f : 0f) + playerLen - 0.5f * myLen;
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = p;
+                    RetreatInfo = $"{p.name}: enemy {myLen:0}m vs player {playerLen:0}m{(safe ? "" : " (tidak aman)")}";
+                }
+            }
+
+            return best;
+        }
+
+        protected virtual void UpdateFlee()
+        {
+            Vector3 fleeTarget;
+            if (currentRetreatPoint != null)
+            {
+                fleeTarget = currentRetreatPoint.position;
+            }
+            else
+            {
+                Vector3 away = target != null ? (transform.position - target.position).normalized : transform.forward;
+                fleeTarget = transform.position + away * 6f;
+            }
+
+            Vector3 flatDiff = fleeTarget - transform.position;
+            flatDiff.y = 0f;
+            bool atSafePoint = flatDiff.magnitude <= 1.5f;
+
+            if (!atSafePoint)
+            {
+                MoveTo(fleeTarget, currentRetreatPoint != null ? "Retreat Point" : "Menjauh dari player");
+                Reason = $"HP {health.Normalized:P0} → kabur ke tempat aman";
+            }
+            else
+            {
+                StopMoving();
+                DestinationLabel = "Di Retreat Point (regen)";
+                health.Heal(regenPerSecond * Time.deltaTime);
+                Reason = $"Memulihkan HP ({health.Normalized:P0})";
+                if (target != null)
+                    FaceTowards(target.position);
+            }
+
+            // Terpojok: player terlalu dekat → melawan balik
+            if (perception.CanSeeTarget && perception.DistanceToTarget < 2.2f && stateTimer > 1.5f)
+            {
+                ChangeState(EnemyState.Chase, "Terpojok → melawan balik");
+                return;
+            }
+
+            if (health.Normalized >= recoverHealthThreshold)
+            {
+                if (memory.IsFresh)
+                    ChangeState(EnemyState.Investigate, "HP pulih → kembali memburu");
+                else
+                    ChangeState(EnemyState.Patrol, "HP pulih");
+            }
+        }
+
         // ---------------- DEAD ----------------
 
         private void OnDeath()
         {
             Reason = "Mati";
+            StopAllCoroutines();
+            IsTraversingLink = false;
             if (agent.isOnNavMesh)
                 agent.isStopped = true;
             agent.enabled = false;
@@ -439,7 +629,7 @@ namespace DungeonHunter
 
         protected void MoveTo(Vector3 position, string label)
         {
-            if (!agent.isOnNavMesh)
+            if (!agent.isOnNavMesh || IsTraversingLink)
                 return;
 
             agent.isStopped = false;
@@ -453,7 +643,7 @@ namespace DungeonHunter
 
         protected void StopMoving()
         {
-            if (agent.isOnNavMesh)
+            if (agent.isOnNavMesh && !IsTraversingLink)
             {
                 agent.isStopped = true;
                 agent.ResetPath();
@@ -476,6 +666,100 @@ namespace DungeonHunter
         protected float DistanceToTarget =>
             target != null ? Vector3.Distance(transform.position, target.position) : Mathf.Infinity;
 
+        /// <summary>
+        /// Path Partial: tujuan tidak bisa dicapai (mis. di balik gerbang tertutup).
+        /// Agent tetap berjalan ke ujung path (titik terdekat), lalu menunggu sambil menghadap tujuan.
+        /// </summary>
+        protected bool HandleUnreachable(Vector3 goal, string reason)
+        {
+            if (agent.pathPending || agent.pathStatus != NavMeshPathStatus.PathPartial)
+            {
+                unreachableTimer = 0f;
+                return false;
+            }
+
+            DestinationLabel = "Titik terdekat yang bisa dicapai";
+            Reason = reason + " → tunggu di titik terdekat";
+            if (agent.remainingDistance <= 1f)
+            {
+                unreachableTimer += Time.deltaTime;
+                FaceTowards(goal);
+            }
+            return true;
+        }
+
+        /// <summary>Panjang path NavMesh (memakai area cost agent ini). Infinity jika tidak ada path lengkap.</summary>
+        public float PathLength(Vector3 from, Vector3 to)
+        {
+            if (!NavMesh.SamplePosition(from, out NavMeshHit a, 2f, NavMesh.AllAreas) ||
+                !NavMesh.SamplePosition(to, out NavMeshHit b, 2f, NavMesh.AllAreas))
+                return Mathf.Infinity;
+
+            if (!NavMesh.CalculatePath(a.position, b.position, queryFilter, scratchPath) ||
+                scratchPath.status != NavMeshPathStatus.PathComplete)
+                return Mathf.Infinity;
+
+            return CornersLength(scratchPath.corners);
+        }
+
+        public static float CornersLength(Vector3[] corners)
+        {
+            float len = 0f;
+            for (int i = 1; i < corners.Length; i++)
+                len += Vector3.Distance(corners[i - 1], corners[i]);
+            return len;
+        }
+
+        /// <summary>Nama area NavMesh di bawah enemy (Walkable / Trap / ...).</summary>
+        public string CurrentAreaName
+        {
+            get
+            {
+                if (!agent.enabled || !NavMesh.SamplePosition(transform.position, out NavMeshHit hit, 1f, NavMesh.AllAreas))
+                    return "-";
+                int index = 0;
+                int mask = hit.mask;
+                while (mask > 1)
+                {
+                    mask >>= 1;
+                    index++;
+                }
+                return index == TrapArea ? "Trap" : index == 0 ? "Walkable" : $"Area {index}";
+            }
+        }
+
+        /// <summary>NavMeshLink: lompatan parabola dari ujung link awal ke ujung link akhir.</summary>
+        private IEnumerator TraverseLinkRoutine()
+        {
+            IsTraversingLink = true;
+            HasDestination = false;
+            OffMeshLinkData data = agent.currentOffMeshLinkData;
+            Vector3 start = transform.position;
+            Vector3 end = data.endPos + Vector3.up * agent.baseOffset;
+            float duration = Mathf.Max(0.35f, Vector3.Distance(start, end) / linkJumpSpeed);
+
+            Vector3 flat = end - start;
+            flat.y = 0f;
+            if (flat.sqrMagnitude > 0.01f)
+                transform.rotation = Quaternion.LookRotation(flat);
+
+            float t = 0f;
+            while (t < 1f)
+            {
+                t += Time.deltaTime / duration;
+                float clamped = Mathf.Clamp01(t);
+                Vector3 pos = Vector3.Lerp(start, end, clamped);
+                pos.y += linkJumpHeight * 4f * clamped * (1f - clamped);
+                transform.position = pos;
+                yield return null;
+            }
+
+            if (agent.isOnOffMeshLink)
+                agent.CompleteOffMeshLink();
+            LinksTraversed++;
+            IsTraversingLink = false;
+        }
+
         /// <summary>Steering behavior: Separation antar enemy.</summary>
         private void ApplySeparation()
         {
@@ -493,7 +777,7 @@ namespace DungeonHunter
             }
 
             SeparationForce = push * separationStrength;
-            if (push.sqrMagnitude > 0.0001f && agent.isOnNavMesh)
+            if (push.sqrMagnitude > 0.0001f && agent.isOnNavMesh && !agent.isOnOffMeshLink)
                 agent.Move(SeparationForce * Time.deltaTime);
         }
 
@@ -510,6 +794,11 @@ namespace DungeonHunter
             foreach (Transform wp in waypoints)
                 if (wp != null)
                     Gizmos.DrawWireCube(wp.position, Vector3.one * 0.4f);
+
+            Gizmos.color = Color.green;
+            foreach (Transform rp in retreatPoints)
+                if (rp != null)
+                    Gizmos.DrawWireSphere(rp.position, 0.6f);
         }
     }
 }

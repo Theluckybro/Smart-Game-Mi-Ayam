@@ -18,14 +18,24 @@ namespace DungeonHunter.EditorTools
     ///
     /// Legenda peta (1 karakter = 1 sel 2x2 meter):
     ///   #  dinding        .  lantai          P  spawn player
-    ///   M  melee enemy    R  ranged enemy    K  dungeon key
-    ///   D  pintu artifact A  artifact        w  waypoint
-    ///   L  obor / point light
+    ///   M  melee enemy    R  ranged enemy    G  guardian
+    ///   K  dungeon key    D  pintu guardian  A  artifact
+    ///   w  waypoint       S  retreat point   L  obor / point light
+    ///   T  jebakan duri (NavMesh area "Trap", cost tinggi)
+    ///   g  gerbang besi (dynamic obstacle, menutup saat Key diambil)
+    ///
+    /// Struktur tambahan (didefinisikan lewat konstanta, bukan karakter peta):
+    ///   Balkon setinggi 1.4 m di ruang barat + ramp naik + NavMeshLink untuk lompat turun.
     /// </summary>
     public static class DungeonSceneBuilder
     {
         private const float Cell = 2f;
         private const float WallHeight = 2.5f;
+
+        // Balkon ruang barat (baris 9–11, kolom 1–5) + ramp (baris 9–10, kolom 6–7, naik ke arah barat)
+        private const int BalconyRowMin = 9, BalconyRowMax = 11, BalconyColMin = 1, BalconyColMax = 5;
+        private const int RampRowMin = 9, RampRowMax = 10, RampColMin = 6, RampColMax = 7;
+        private const float BalconyHeight = 1.4f;
 
         private const string Root = "Assets/_DungeonHunter";
         private const string ScenePath = Root + "/Scenes/DungeonHunter_Progress.unity";
@@ -39,20 +49,20 @@ namespace DungeonHunter.EditorTools
             "##########.L........L.##########",
             "##########.....A......##########",
             "##########............##########",
-            "##########.....R......##########",
+            "##########.....G......##########",
             "##########.L........L.##########",
             "###############DD###############",
             "###############..###############",
-            "#.......##............##.......#",
+            "#S......##............##.......#",
             "#.R.L...##.w..L....w..##...L.R.#",
             "#.......##...#....#...##.......#",
-            "#.........................#....#",
-            "#.........................#..K.#",
+            "#.............TTTT....gg..#....#",
+            "#.............TTTT....gg..#..K.#",
             "#.......##...#....#...##.......#",
-            "#.......##.w..M...Mw..##.......#",
+            "#.......##.w..M...Mw..##......S#",
             "#.......##............##.......#",
-            "###########..###################",
-            "###########..###################",
+            "###########..##############..###",
+            "###########.........S...L....###",
             "########........################",
             "########...L....################",
             "########...P....################",
@@ -100,6 +110,8 @@ namespace DungeonHunter.EditorTools
             var level = new GameObject("Level");
             BuildFloor(level.transform);
             BuildWalls(level.transform);
+            BuildBalcony(level.transform);
+            BuildTrapVolumes(level.transform);
 
             var surface = level.AddComponent<NavMeshSurface>();
             surface.collectObjects = CollectObjects.Children;
@@ -108,10 +120,13 @@ namespace DungeonHunter.EditorTools
             SaveNavMeshData(surface);
 
             BuildTorches();
+            BuildJumpLink();
+            BuildSpikeTraps();
 
             // ---------- AI POINTS ----------
             var points = new GameObject("AI Points").transform;
             List<Transform> waypoints = CellsOf('w').Select((p, i) => CreatePoint(points, $"Waypoint_{i}", p)).ToList();
+            List<Transform> retreats = CellsOf('S').Select((p, i) => CreatePoint(points, $"RetreatPoint_{i}", p)).ToList();
 
             // ---------- PLAYER ----------
             GameObject player = CreatePlayer(CellsOf('P').First());
@@ -134,7 +149,7 @@ namespace DungeonHunter.EditorTools
             {
                 var e = CreateMelee(enemies, p, meleeIndex + 1);
                 List<Transform> route = OrderLoop(waypoints.Where(w => Vector3.Distance(w.position, p) < 18f).ToList());
-                e.Setup($"Skeleton Warrior {meleeIndex + 1}", player.transform, route);
+                e.Setup($"Skeleton Warrior {meleeIndex + 1}", player.transform, route, retreats);
                 e.SetStartWaypoint(meleeIndex * 2 % Mathf.Max(1, route.Count));
                 meleeIndex++;
             }
@@ -143,14 +158,21 @@ namespace DungeonHunter.EditorTools
             foreach (Vector3 p in CellsOf('R'))
             {
                 var e = CreateRanged(enemies, p, rangedIndex + 1, projectilePrefab);
-                e.Setup($"Skeleton Archer {rangedIndex + 1}", player.transform, new List<Transform>());
+                e.Setup($"Skeleton Archer {rangedIndex + 1}", player.transform, new List<Transform>(), retreats);
                 rangedIndex++;
+            }
+
+            foreach (Vector3 p in CellsOf('G'))
+            {
+                var g = CreateGuardian(enemies, p);
+                g.Setup("Crypt Guardian", player.transform, new List<Transform>(), new List<Transform>());
             }
 
             // ---------- OBJECTIVES ----------
             CreateKey(CellsOf('K').First());
             CreateDoor(Centroid(CellsOf('D')));
             CreateArtifact(CellsOf('A').First());
+            CreatePortcullis(Centroid(CellsOf('g')));
 
             // ---------- SAVE ----------
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -169,12 +191,16 @@ namespace DungeonHunter.EditorTools
         private static Vector3 CellToWorld(int row, int col) =>
             new Vector3(col * Cell, 0f, (Rows - 1 - row) * Cell);
 
+        private static bool OnBalcony(int row, int col) =>
+            row >= BalconyRowMin && row <= BalconyRowMax && col >= BalconyColMin && col <= BalconyColMax;
+
+        /// <summary>Posisi dunia sebuah sel, termasuk ketinggian lantai (balkon = 1.4 m).</summary>
         private static IEnumerable<Vector3> CellsOf(char c)
         {
             for (int r = 0; r < Rows; r++)
                 for (int col = 0; col < Cols; col++)
                     if (Map[r][col] == c)
-                        yield return CellToWorld(r, col);
+                        yield return CellToWorld(r, col) + Vector3.up * (OnBalcony(r, col) ? BalconyHeight : 0f);
         }
 
         private static Vector3 Centroid(IEnumerable<Vector3> pts)
@@ -267,6 +293,111 @@ namespace DungeonHunter.EditorTools
                             return true;
                     }
             return false;
+        }
+
+        /// <summary>Balkon (platform tinggi) + ramp. Keduanya walkable dan ikut di-bake ke NavMesh.</summary>
+        private static void BuildBalcony(Transform parent)
+        {
+            Vector3 nw = CellToWorld(BalconyRowMin, BalconyColMin) + new Vector3(-Cell * 0.5f, 0f, Cell * 0.5f);
+            Vector3 se = CellToWorld(BalconyRowMax, BalconyColMax) + new Vector3(Cell * 0.5f, 0f, -Cell * 0.5f);
+            var balcony = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            balcony.name = "Balcony";
+            balcony.transform.SetParent(parent);
+            balcony.transform.position = new Vector3((nw.x + se.x) * 0.5f, BalconyHeight * 0.5f, (nw.z + se.z) * 0.5f);
+            balcony.transform.localScale = new Vector3(se.x - nw.x, BalconyHeight, nw.z - se.z);
+            balcony.GetComponent<Renderer>().sharedMaterial = Materials["Balcony"];
+            balcony.isStatic = true;
+
+            Vector3 rampNw = CellToWorld(RampRowMin, RampColMin) + new Vector3(-Cell * 0.5f, 0f, Cell * 0.5f);
+            Vector3 rampSe = CellToWorld(RampRowMax, RampColMax) + new Vector3(Cell * 0.5f, 0f, -Cell * 0.5f);
+            float run = rampSe.x - rampNw.x;
+            float angle = Mathf.Atan2(BalconyHeight, run) * Mathf.Rad2Deg;
+            float slopeLength = Mathf.Sqrt(run * run + BalconyHeight * BalconyHeight);
+            const float thickness = 0.2f;
+
+            var ramp = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            ramp.name = "Ramp";
+            ramp.transform.SetParent(parent);
+            ramp.transform.rotation = Quaternion.Euler(0f, 0f, -angle);
+            ramp.transform.position = new Vector3((rampNw.x + rampSe.x) * 0.5f, BalconyHeight * 0.5f, (rampNw.z + rampSe.z) * 0.5f)
+                                      - ramp.transform.up * thickness * 0.5f;
+            ramp.transform.localScale = new Vector3(slopeLength, thickness, rampNw.z - rampSe.z);
+            ramp.GetComponent<Renderer>().sharedMaterial = Materials["Balcony"];
+            ramp.isStatic = true;
+        }
+
+        /// <summary>NavMeshModifierVolume: menandai lantai jebakan sebagai area "Trap" (cost tinggi).</summary>
+        private static void BuildTrapVolumes(Transform parent)
+        {
+            int trapArea = NavMesh.GetAreaFromName("Trap");
+            if (trapArea < 0)
+                throw new InvalidOperationException("NavMesh area 'Trap' belum ada di Project Settings → Navigation → Areas");
+
+            foreach (Rect r in TrapRects())
+            {
+                var go = new GameObject("TrapArea");
+                go.transform.SetParent(parent);
+                go.transform.position = new Vector3(r.center.x, 0f, r.center.y);
+                var volume = go.AddComponent<NavMeshModifierVolume>();
+                volume.size = new Vector3(r.width, 2f, r.height);
+                volume.center = Vector3.zero;
+                volume.area = trapArea;
+            }
+        }
+
+        /// <summary>Gabungkan sel 'T' menjadi satu persegi panjang (x, z).</summary>
+        private static IEnumerable<Rect> TrapRects()
+        {
+            List<Vector3> cells = CellsOf('T').ToList();
+            if (cells.Count == 0)
+                yield break;
+            float minX = cells.Min(c => c.x) - Cell * 0.5f, maxX = cells.Max(c => c.x) + Cell * 0.5f;
+            float minZ = cells.Min(c => c.z) - Cell * 0.5f, maxZ = cells.Max(c => c.z) + Cell * 0.5f;
+            yield return Rect.MinMaxRect(minX, minZ, maxX, maxZ);
+        }
+
+        /// <summary>NavMeshLink satu arah: lompat turun dari tepi selatan balkon ke lantai.</summary>
+        private static void BuildJumpLink()
+        {
+            Vector3 left = CellToWorld(BalconyRowMax, BalconyColMin);
+            Vector3 right = CellToWorld(BalconyRowMax, BalconyColMax);
+            float edgeZ = left.z - Cell * 0.5f;
+
+            var go = new GameObject("NavMeshLink_BalconyJump");
+            go.transform.position = new Vector3((left.x + right.x) * 0.5f, 0f, edgeZ);
+            var link = go.AddComponent<NavMeshLink>();
+            // Lebar link dibuat lebih kecil dari lebar balkon dan ujungnya agak masuk ke NavMesh:
+            // jika tepi link keluar dari NavMesh, link tidak tersambung ke graph pathfinding.
+            link.startPoint = new Vector3(0f, BalconyHeight, 1.2f);
+            link.endPoint = new Vector3(0f, 0f, -2.2f);
+            link.width = (right.x - left.x) - 2f;
+            link.bidirectional = false;
+            link.area = NavMesh.GetAreaFromName("Jump");
+        }
+
+        private static void BuildSpikeTraps()
+        {
+            foreach (Rect r in TrapRects())
+            {
+                var trap = new GameObject("SpikeTrap");
+                trap.transform.position = new Vector3(r.center.x, 0f, r.center.y);
+
+                CreateVisual(PrimitiveType.Cube, trap.transform, new Vector3(0f, 0.01f, 0f),
+                    new Vector3(r.width, 0.02f, r.height), "TrapPlate");
+
+                var spikes = new GameObject("Spikes").transform;
+                spikes.SetParent(trap.transform, false);
+                spikes.localPosition = new Vector3(0f, -0.35f, 0f);
+                for (float x = -r.width * 0.5f + 0.5f; x < r.width * 0.5f; x += 1f)
+                    for (float z = -r.height * 0.5f + 0.5f; z < r.height * 0.5f; z += 1f)
+                        CreateVisual(PrimitiveType.Cube, spikes, new Vector3(x, 0f, z), new Vector3(0.12f, 0.6f, 0.12f), "Metal");
+
+                var spikeTrap = trap.AddComponent<SpikeTrap>();
+                var so = new SerializedObject(spikeTrap);
+                so.FindProperty("size").vector3Value = new Vector3(r.width, 1f, r.height);
+                so.FindProperty("spikes").objectReferenceValue = spikes;
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
         }
 
         private static void SaveNavMeshData(NavMeshSurface surface)
@@ -410,6 +541,7 @@ namespace DungeonHunter.EditorTools
         {
             var e = CreateEnemyBase<RangedEnemy>(parent, $"Ranged_{index}", pos, 0.45f, 2f, 45f, "Ranged", 0.9f);
             e.GetComponent<AIPerception>().Configure(12f, 100f);
+            SetField(e, "trapAreaCost", 8f);
             CreateVisual(PrimitiveType.Cube, e.transform, new Vector3(-0.45f, 1.1f, 0.35f), new Vector3(0.08f, 1.1f, 0.08f), "Wood");
 
             var muzzle = new GameObject("FirePoint").transform;
@@ -417,6 +549,18 @@ namespace DungeonHunter.EditorTools
             muzzle.localPosition = new Vector3(0f, 1.3f, 0.7f);
             e.SetProjectile(prefab, muzzle);
             return e;
+        }
+
+        private static GuardianEnemy CreateGuardian(Transform parent, Vector3 pos)
+        {
+            var g = CreateEnemyBase<GuardianEnemy>(parent, "Guardian", pos, 0.8f, 3f, 300f, "Guardian", 1.6f);
+            g.GetComponent<AIPerception>().Configure(11f, 150f);
+            SetField(g, "chaseSpeed", 3.2f);
+            SetField(g, "patrolSpeed", 1.8f);
+            SetField(g, "trapAreaCost", 1f);
+            CreateVisual(PrimitiveType.Cube, g.transform, new Vector3(0.9f, 1.6f, 0.4f), new Vector3(0.6f, 0.6f, 0.9f), "Metal");
+            CreateVisual(PrimitiveType.Cube, g.transform, new Vector3(-0.9f, 1.6f, 0.4f), new Vector3(0.6f, 0.6f, 0.9f), "Metal");
+            return g;
         }
 
         private static Projectile CreateProjectilePrefab()
@@ -467,7 +611,7 @@ namespace DungeonHunter.EditorTools
 
         private static void CreateDoor(Vector3 pos)
         {
-            var door = new GameObject("ArtifactDoor");
+            var door = new GameObject("GuardianDoor");
             door.transform.position = pos;
 
             var panel = GameObject.CreatePrimitive(PrimitiveType.Cube);
@@ -502,6 +646,9 @@ namespace DungeonHunter.EditorTools
             var gem = CreateVisual(PrimitiveType.Cube, visual, Vector3.zero, Vector3.one * 0.5f, "Artifact");
             gem.transform.localRotation = Quaternion.Euler(45f, 0f, 45f);
 
+            var seal = CreateVisual(PrimitiveType.Cylinder, artifact.transform, new Vector3(0f, 0.05f, 0f),
+                new Vector3(3f, 0.05f, 3f), "Seal");
+
             var light = artifact.AddComponent<Light>();
             light.type = LightType.Point;
             light.color = new Color(0.3f, 0.9f, 1f);
@@ -510,7 +657,30 @@ namespace DungeonHunter.EditorTools
 
             var pickup = artifact.AddComponent<ArtifactPickup>();
             SetField(pickup, "visual", visual);
+            SetField(pickup, "sealVisual", seal);
             SetField(pickup, "interactRadius", 1.6f);
+        }
+
+        /// <summary>Gerbang besi antara hall dan ruang timur (dynamic obstacle, menutup saat Key diambil).</summary>
+        private static void CreatePortcullis(Vector3 pos)
+        {
+            var gate = new GameObject("Portcullis");
+            gate.transform.position = pos;
+
+            var panel = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            panel.name = "GatePanel";
+            panel.transform.SetParent(gate.transform, false);
+            panel.transform.localPosition = new Vector3(0f, WallHeight * 0.5f, 0f);
+            panel.transform.localScale = new Vector3(0.5f, WallHeight, Cell * 2f);
+            panel.GetComponent<Renderer>().sharedMaterial = Materials["Gate"];
+
+            var obstacle = panel.AddComponent<NavMeshObstacle>();
+            obstacle.carving = true;
+            obstacle.shape = NavMeshObstacleShape.Box;
+            obstacle.size = Vector3.one;
+
+            var portcullis = gate.AddComponent<Portcullis>();
+            SetField(portcullis, "gatePanel", panel.transform);
         }
 
         // =====================================================
@@ -550,6 +720,11 @@ namespace DungeonHunter.EditorTools
             AddMaterial("Sword", new Color(0.85f, 0.88f, 0.92f));
             AddMaterial("Melee", new Color(0.78f, 0.75f, 0.65f));
             AddMaterial("Ranged", new Color(0.55f, 0.6f, 0.45f));
+            AddMaterial("Guardian", new Color(0.35f, 0.2f, 0.45f));
+            AddMaterial("Seal", new Color(0.6f, 0.2f, 1f), new Color(0.8f, 0.2f, 1.6f));
+            AddMaterial("Balcony", new Color(0.33f, 0.3f, 0.28f));
+            AddMaterial("TrapPlate", new Color(0.35f, 0.08f, 0.06f));
+            AddMaterial("Gate", new Color(0.25f, 0.25f, 0.28f));
             AddMaterial("Eyes", new Color(1f, 0.2f, 0.1f), new Color(2f, 0.2f, 0.1f));
             AddMaterial("Metal", new Color(0.55f, 0.55f, 0.6f));
             AddMaterial("Wood", new Color(0.45f, 0.3f, 0.15f));

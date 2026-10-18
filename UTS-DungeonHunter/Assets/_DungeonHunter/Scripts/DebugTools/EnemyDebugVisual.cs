@@ -7,7 +7,8 @@ namespace DungeonHunter
     /// - Field of View (kuning = tidak melihat, merah = melihat player)
     /// - Path NavMesh (cyan)
     /// - Last Known Position (magenta)
-    /// - Ring jarak: attack range (melee) / maintain distance (ranged)
+    /// - Ring jarak: attack range (melee) / maintain distance (ranged) / leash + slam (guardian)
+    /// - Garis arah Charge (guardian) dan garis ke Retreat Point (saat Flee)
     /// </summary>
     [RequireComponent(typeof(EnemyAI))]
     public class EnemyDebugVisual : MonoBehaviour
@@ -24,6 +25,7 @@ namespace DungeonHunter
         private LineRenderer memoryLine;
         private LineRenderer ringA;
         private LineRenderer ringB;
+        private LineRenderer extraLine;
         private Transform root;
 
         private void Awake()
@@ -39,6 +41,7 @@ namespace DungeonHunter
             memoryLine = CreateLine("Last Known Position", 0.05f);
             ringA = CreateLine("Range A", 0.035f);
             ringB = CreateLine("Range B", 0.035f);
+            extraLine = CreateLine("Retreat / Charge", 0.09f);
         }
 
         private void OnDisable()
@@ -79,6 +82,7 @@ namespace DungeonHunter
             DrawPath();
             DrawMemory();
             DrawRings();
+            DrawExtra();
         }
 
         private void DrawFov()
@@ -151,11 +155,39 @@ namespace DungeonHunter
                     DrawRing(ringA, transform.position, ranged.PreferredMin, new Color(1f, 0.5f, 0.1f, 0.8f));
                     DrawRing(ringB, transform.position, ranged.PreferredMax, new Color(1f, 0.75f, 0.2f, 0.6f));
                     break;
+                case GuardianEnemy guardian:
+                    DrawRing(ringA, guardian.HomePosition, guardian.LeashRadius, new Color(0.7f, 0.3f, 1f, 0.7f));
+                    DrawRing(ringB, transform.position, guardian.SlamRadius,
+                        guardian.IsWindingUp ? new Color(1f, 0.1f, 0.1f, 1f) : new Color(1f, 0.4f, 0.4f, 0.5f));
+                    break;
                 default:
                     ringA.positionCount = 0;
                     ringB.positionCount = 0;
                     break;
             }
+        }
+
+        private void DrawExtra()
+        {
+            if (enemy.State == EnemyState.Flee && enemy.CurrentRetreatPoint != null)
+            {
+                extraLine.positionCount = 2;
+                extraLine.SetPosition(0, Flat(transform.position));
+                extraLine.SetPosition(1, Flat(enemy.CurrentRetreatPoint.position));
+                SetColor(extraLine, new Color(0.2f, 1f, 0.4f, 0.9f));
+                return;
+            }
+
+            if (enemy is GuardianEnemy guardian && guardian.IsCharging)
+            {
+                extraLine.positionCount = 2;
+                extraLine.SetPosition(0, Flat(transform.position));
+                extraLine.SetPosition(1, Flat(transform.position + guardian.ChargeDirection * 8f));
+                SetColor(extraLine, new Color(1f, 0.6f, 0f, 1f));
+                return;
+            }
+
+            extraLine.positionCount = 0;
         }
 
         private static void DrawRing(LineRenderer lr, Vector3 center, float radius, Color color)
@@ -176,6 +208,6 @@ namespace DungeonHunter
             lr.endColor = c;
         }
 
-        private static Vector3 Flat(Vector3 p) => new Vector3(p.x, LineY, p.z);
+        private static Vector3 Flat(Vector3 p) => new Vector3(p.x, p.y + LineY, p.z);
     }
 }

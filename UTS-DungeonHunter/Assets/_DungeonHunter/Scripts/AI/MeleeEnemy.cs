@@ -45,6 +45,7 @@ namespace DungeonHunter
 
         protected override void ExitState(EnemyState state)
         {
+            base.ExitState(state);
             if (state == EnemyState.Attack)
                 isWindingUp = false;
         }

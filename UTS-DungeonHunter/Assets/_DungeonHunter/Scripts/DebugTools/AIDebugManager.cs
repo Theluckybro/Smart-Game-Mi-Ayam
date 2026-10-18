@@ -32,6 +32,9 @@ namespace DungeonHunter
                 if (enemy.GetComponent<EnemyDebugVisual>() == null)
                     enemy.gameObject.AddComponent<EnemyDebugVisual>();
             }
+
+            if (GetComponent<NavigationDebugVisual>() == null)
+                gameObject.AddComponent<NavigationDebugVisual>();
         }
 
         private void Update()
@@ -71,12 +74,15 @@ namespace DungeonHunter
             if (cam == null)
                 cam = Camera.main;
 
-            GUI.Box(new Rect(10, Screen.height - 118, 330, 108),
+            GUI.Box(new Rect(10, Screen.height - 178, 360, 168),
                 "<b>AI DEBUG MODE</b> (F1)\n" +
                 "<color=#ffe633>■</color> FOV   <color=#ff3333>■</color> FOV melihat player\n" +
                 "<color=#33e6ff>■</color> NavMesh Path   <color=#ff33ff>■</color> Last Known Position\n" +
-                "<color=#ff4d4d>■</color> Attack range (melee)\n" +
-                "<color=#ff8019>■</color> Maintain distance (ranged)", panelStyle);
+                "<color=#ff4d4d>■</color> Attack range (melee)   <color=#ff8019>■</color> Maintain distance\n" +
+                "<color=#b34dff>■</color> Leash Guardian   <color=#ff9900>■</color> Arah Charge\n" +
+                "<color=#33ff66>■</color> Retreat Point / jalur Flee\n" +
+                "<color=#ff2a2a>■</color> Area Trap (cost tinggi)   <color=#ffffff>■</color> NavMeshLink\n" +
+                "<color=#aaaaaa>■</color> Gerbang besi (dynamic obstacle)", panelStyle);
 
             foreach (EnemyAI e in EnemyAI.All)
             {
@@ -105,8 +111,14 @@ namespace DungeonHunter
                 p.LineOfSightBlocked ? " (terhalang)" : "";
 
             string path = "-";
+            string nav = "-";
             if (e.Agent != null && e.Agent.enabled)
-                path = e.Agent.hasPath ? $"ACTIVE ({e.Agent.pathStatus})" : "NONE";
+            {
+                path = e.Agent.hasPath
+                    ? $"ACTIVE ({e.Agent.pathStatus}, {EnemyAI.CornersLength(e.Agent.path.corners):0.0}m)"
+                    : "NONE";
+                nav = e.IsTraversingLink ? "<color=#ffffff><b>LOMPAT via NavMeshLink</b></color>" : $"area {e.CurrentAreaName}";
+            }
 
             string lkp = m.HasLastKnownPosition
                 ? $"({m.LastKnownPosition.x:0.0}, {m.LastKnownPosition.z:0.0}) via {m.LastSource}"
@@ -121,7 +133,11 @@ namespace DungeonHunter
                 $"Distance : {p.DistanceToTarget:0.0}\n" +
                 $"Destination : {e.DestinationLabel}\n" +
                 $"Path : {path}\n" +
+                $"Nav : {nav}\n" +
                 $"Last Known : {lkp}";
+
+            if (e.State == EnemyState.Flee && !string.IsNullOrEmpty(e.RetreatInfo))
+                text += $"\nRetreat : {e.RetreatInfo}";
 
             if (!string.IsNullOrEmpty(e.ExtraDebugInfo))
                 text += "\n" + e.ExtraDebugInfo;

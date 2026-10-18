@@ -87,6 +87,7 @@ namespace DungeonHunter
 
         protected override void ExitState(EnemyState state)
         {
+            base.ExitState(state);
             if (state == EnemyState.Reposition)
                 agent.updateRotation = true;
             if (state == EnemyState.Attack)

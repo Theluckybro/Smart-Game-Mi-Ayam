@@ -2,18 +2,18 @@
 
 **Topik 3** · Unity 6000.3.23f1 · URP · AI Navigation (NavMesh) · New Input System
 
-Player menjelajahi dungeon, mencari **Dungeon Key**, membuka pintu ruang Artifact,
-lalu mengambil **Ancient Artifact**. (Guardian menyusul di progress 2.)
+Player menjelajahi dungeon, mencari **Dungeon Key**, membuka pintu ruang Guardian,
+mengalahkan **Crypt Guardian**, lalu mengambil **Ancient Artifact**.
 
-> Status: **Progress Demo 1 (± 50% Fokus AI)**
+> Status: **Progress 2 — seluruh Fokus AI Topik 3 sudah diimplementasikan**
 >
 > Fokus AI Topik 3: `Melee AI + Ranged AI + Maintain Distance + Flee/Retreat + Navigation + Guardian Behavior`
 >
-> |||
+> | Progress 1 | Progress 2 |
 > |---|---|
-> | ✅ Melee AI | ⬜ Flee / Retreat |
-> | ✅ Ranged AI | ⬜ Navigation (lanjutan) |
-> | ✅ Maintain Distance | ⬜ Guardian Behavior |
+> | ✅ Melee AI | ✅ Flee / Retreat |
+> | ✅ Ranged AI | ✅ Navigation (Area Cost, NavMeshLink, Dynamic Obstacle, Partial Path) |
+> | ✅ Maintain Distance | ✅ Guardian Behavior (Behavior Tree, Phase 2) |
 
 ## Cara membuka
 
@@ -42,27 +42,32 @@ lalu mengambil **Ancient Artifact**. (Guardian menyusul di progress 2.)
 
 ![Alur gameplay](Docs/images/alur_gameplay.png)
 
+## Peta navigasi
+
+![Peta navigasi](Docs/images/peta_navigasi.png)
+
 ## Arsitektur AI
 
 ```text
-Perception ──► Memory ──► Decision (FSM) ──► Navigation (NavMesh) + Steering (Separation)
+Perception ──► Memory ──► Decision (FSM / Behavior Tree) ──► Navigation (NavMesh) + Steering (Separation)
 ```
 
 | Materi | Implementasi | File |
 |---|---|---|
 | Perception | Distance + FOV + Line of Sight (raycast) + close awareness + **Hearing** (noise langkah/serangan) | `AI/AIPerception.cs`, `Core/NoiseSystem.cs` |
 | Memory | Last Known Position, Last Seen Time, sumber info (Vision/Hearing/Damage), kadaluarsa | `AI/AIMemory.cs` |
-| Decision | Finite State Machine: Patrol, Investigate, Search, Chase, Attack, Reposition, Dead | `AI/EnemyAI.cs` |
+| Decision | **FSM** (Melee & Ranged) dan **Behavior Tree** (Guardian) | `AI/EnemyAI.cs`, `AI/BehaviorTree.cs`, `AI/GuardianEnemy.cs` |
 | Movement / Steering | NavMeshAgent + **Separation** antar enemy | `AI/EnemyAI.cs` |
-| Navigation (dasar) | Unity NavMesh (NavMeshSurface, NavMeshObstacle carve pada pintu), patrol waypoint | `Editor/DungeonSceneBuilder.cs` |
-| Tactical | **Maintain Distance** (archer) | `AI/RangedEnemy.cs` |
+| Navigation | NavMesh + **Area Cost** (jebakan), **NavMeshLink** (lompat dari balkon), **dynamic obstacle** (gerbang besi → repath), **Partial Path**, keputusan berbasis **panjang path** | `AI/EnemyAI.cs`, `Gameplay/SpikeTrap.cs`, `Gameplay/Portcullis.cs` |
+| Tactical | **Maintain Distance** (archer), **Flee/Retreat** ke titik teraman, **Guardian leash** | `AI/RangedEnemy.cs`, `AI/EnemyAI.cs`, `AI/GuardianEnemy.cs` |
 
 ### Tipe enemy
 
 | Enemy | Jumlah | Perilaku |
 |---|---|---|
-| **Skeleton Warrior** (Melee AI) | 2 | Patroli waypoint → Chase → Attack (windup, bisa dihindari). Kehilangan player → ke Last Known Position → Search → Patrol |
-| **Skeleton Archer** (Ranged AI) | 3 | Berjaga & look-around → **Maintain Distance** 5–9 m: terlalu jauh = mendekat, ideal = membidik & menembak, terlalu dekat = mundur sambil menghadap player (evaluasi 7 arah × 2 jarak di NavMesh, bisa menyamping di pojok). Terpojok → tetap menembak, lalu coba mundur lagi |
+| **Skeleton Warrior** (Melee AI) | 2 | Patroli waypoint → Chase → Attack (windup, bisa dihindari). Kehilangan player → ke Last Known Position → Search → Patrol. HP ≤ 30% → Flee |
+| **Skeleton Archer** (Ranged AI) | 2 | Berjaga & look-around → **Maintain Distance** 5–9 m (mendekat / menembak / mundur). Satu archer berjaga di **balkon**. HP ≤ 30% → Flee |
+| **Crypt Guardian** (Guardian Behavior) | 1 | **Behavior Tree**: jaga pos, kejar di dalam arena (leash 10 m), Ground Slam, Phase 2 (HP ≤ 50%: lebih cepat + Charge), kembali ke pos + regen jika player kabur |
 
 ### FSM Melee
 
@@ -72,46 +77,68 @@ Perception ──► Memory ──► Decision (FSM) ──► Navigation (NavMe
 
 ![FSM Ranged AI](Docs/images/fsm_ranged.png)
 
+### Behavior Tree Guardian
+
+![Behavior Tree Guardian](Docs/images/bt_guardian.png)
+
+## Navigation
+
+| Fitur | Perilaku di game |
+|---|---|
+| **Area Cost** | Lantai jebakan duri di tengah hall = area NavMesh `Trap` (cost 5; archer 8; guardian 1). Enemy memilih jalan memutar (path 18 m → 23 m). Duri melukai siapa pun, jadi player bisa memancing enemy |
+| **NavMeshLink** | Balkon 1.4 m di ruang barat (naik lewat ramp). Link satu arah untuk lompat turun; enemy melompat dengan lintasan parabola |
+| **Dynamic obstacle** | Gerbang besi menutup saat Key diambil (`NavMeshObstacle` carve). Semua enemy otomatis repath lewat koridor selatan (path 19 m → 60 m) |
+| **Partial path** | Tujuan tidak bisa dicapai (mis. di balik pintu terkunci) → enemy ke titik terdekat, menunggu, lalu mencari |
+| **Panjang path** | Flee memilih retreat point yang lebih dulu dicapai enemy daripada player (bukan jarak garis lurus) |
+
 ## AI Debug Mode (F1)
 
 Panel di atas setiap enemy: **State, alasan keputusan (Why), Target, Can See (+ alasan
-tidak melihat: luar radius / luar FOV / terhalang), Distance, Destination, Path,
-Last Known Position**, HP, dan info khusus (status windup melee, range & aiming archer).
+tidak melihat), Distance, Destination, Path (status + panjang), Nav (area di bawah kaki /
+sedang lompat NavMeshLink), Last Known Position**, HP, info Retreat saat Flee, dan untuk
+Guardian: **jalur node Behavior Tree aktif**, Phase, dan Leash.
 
-Garis di Game view: FOV (kuning / merah saat melihat), path NavMesh (cyan),
-Last Known Position (magenta), attack range melee (merah), ring maintain distance (oranye).
+Garis di Game view: FOV, path NavMesh, Last Known Position, attack range, maintain distance,
+leash & slam Guardian, arah Charge, garis ke Retreat Point, zona Trap, panah NavMeshLink,
+Retreat Point, dan status gerbang besi.
 
-## Skenario uji untuk demo progress
+## Skenario uji untuk demo
 
-1. **Perception** — tekan F1, berdiri di luar radius / di belakang enemy / di balik pilar hall → `Can See: FALSE (alasan)`.
-2. **Memory** — terlihat Warrior → CHASE, sembunyi di balik pilar → INVESTIGATE ke titik magenta (LKP) → SEARCH → PATROL.
-3. **Hearing** — sprint (Shift) di dekat enemy yang membelakangi → INVESTIGATE "Mendengar suara".
-4. **Melee AI** — dekati Warrior → ATTACK, perhatikan windup (kedip kuning) lalu menghindar.
-5. **Ranged AI + Maintain Distance** — dekati Archer → REPOSITION (mundur), jauhi → CHASE, jarak ideal → ATTACK (kedip oranye = membidik).
-6. **Win / Lose** — ambil Artifact / biarkan HP habis.
+1. **Perception** — F1, berdiri di luar radius / di belakang enemy / di balik pilar → `Can See: FALSE (alasan)`.
+2. **Memory** — terlihat Warrior → CHASE, sembunyi di balik pilar → INVESTIGATE ke LKP → SEARCH → PATROL.
+3. **Hearing** — sprint di dekat enemy yang membelakangi → INVESTIGATE "Mendengar suara".
+4. **Melee AI** — dekati Warrior → ATTACK (windup kuning) lalu menghindar.
+5. **Ranged AI + Maintain Distance** — dekati Archer → REPOSITION, jauhi → CHASE, jarak ideal → ATTACK.
+6. **Area Cost** — berdiri di seberang jebakan, path cyan Warrior memutar menghindari kotak merah.
+7. **NavMeshLink** — naik ramp ke balkon, turun, biarkan Warrior mengejar → `Nav : LOMPAT via NavMeshLink`.
+8. **Dynamic obstacle** — ambil Key → gerbang menutup → path enemy berubah lewat koridor selatan.
+9. **Flee** — pukul Warrior sampai HP ≤ 30% → FLEE ke Retreat Point (garis hijau), regen, kembali.
+10. **Guardian** — masuk arena → Kejar/Slam, turunkan HP ≤ 50% → Enrage → Charge, keluar arena → Return + regen.
+11. **Win / Lose** — kalahkan Guardian → ambil Artifact / biarkan HP habis.
 
 ## Progress
 
-**Progress 1 (sekarang)**
-- [x] Level dungeon playable & NavMesh dasar
-- [x] Player controller, melee combat, HP, objective (key → pintu → artifact), Win & Lose, HUD
+**Progress 1**
+- [x] Level dungeon playable & NavMesh
+- [x] Player controller, melee combat, HP, Win & Lose, HUD
 - [x] Perception (vision + hearing) & Memory
 - [x] FSM decision making + steering separation
-- [x] **Melee AI** (Skeleton Warrior ×2)
-- [x] **Ranged AI** (Skeleton Archer ×3)
-- [x] **Maintain Distance** (tactical behavior archer)
+- [x] Melee AI, Ranged AI, Maintain Distance
 - [x] AI Debug Mode (F1)
 
 **Progress 2**
-- [ ] **Flee / Retreat** — enemy kabur ke titik aman saat HP rendah, regen, lalu kembali
-- [ ] **Navigation** lanjutan
-- [ ] **Guardian Behavior** — boss penjaga Artifact (arena/leash, serangan khusus, fase)
+- [x] **Flee / Retreat** — retreat point berbasis panjang path, regen, terpojok → melawan
+- [x] **Navigation** — Area Cost, NavMeshLink, dynamic obstacle + repath, partial path
+- [x] **Guardian Behavior** — Behavior Tree, leash, Ground Slam, Phase 2 (Enrage + Charge)
+- [x] Objective lengkap: Key → pintu → Guardian → Artifact
+
+**Sisa (polish)**
 - [ ] Aset final, animasi, audio, VFX, UI, video demo
 
 ## Pembagian kerja (usulan)
 
 | Anggota | Fokus |
 |---|---|
-| Anggota 1 | Perception, Memory, FSM, AI Debug Mode |
-| Anggota 2 | Melee AI, Ranged AI, Maintain Distance, NavMesh |
-| Anggota 3 | Player, combat, GameManager, objective, HUD, level |
+| Anggota 1 | Perception, Memory, FSM, Behavior Tree Guardian, AI Debug Mode |
+| Anggota 2 | NavMesh, Area Cost, NavMeshLink, dynamic obstacle, Maintain Distance, Flee |
+| Anggota 3 | Player, combat, GameManager, objective, HUD, level & aset |

@@ -3,7 +3,7 @@ using UnityEngine;
 namespace DungeonHunter
 {
     /// <summary>
-    /// Pintu ruang Artifact. Terbuka jika player membawa Key.
+    /// Pintu ruang Guardian (tempat Artifact). Terbuka jika player membawa Key.
     /// Memakai NavMeshObstacle (carve) sehingga NavMesh terbuka setelah pintu dibuka.
     /// </summary>
     public class LockedDoor : ProximityInteractable

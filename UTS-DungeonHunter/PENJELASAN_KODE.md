@@ -1,4 +1,4 @@
-# Penjelasan Kode — Dungeon Hunter (Progress 1)
+# Penjelasan Kode — Dungeon Hunter (Progress 2)
 
 Dokumen ini menjelaskan kegunaan setiap class dan fitur yang sudah ada.
 Semua script berada di `Assets/_DungeonHunter/`.
@@ -21,15 +21,16 @@ Semua script berada di `Assets/_DungeonHunter/`.
 Setiap frame, enemy menjalankan urutan berikut:
 
 ```text
-Perception ──► Memory ──► Decision (FSM) ──► Navigation (NavMesh) + Steering (Separation)
+Perception ──► Memory ──► Decision (FSM / Behavior Tree) ──► Navigation (NavMesh) + Steering (Separation)
 ```
 
 Hubungan antar class:
 
 ```text
-EnemyAI (abstract, FSM)
- ├── MeleeEnemy   → Melee AI
- └── RangedEnemy  → Ranged AI + Maintain Distance ──► Projectile
+EnemyAI (abstract, FSM + Flee + Navigation)
+ ├── MeleeEnemy     → Melee AI
+ ├── RangedEnemy    → Ranged AI + Maintain Distance ──► Projectile
+ └── GuardianEnemy  → Guardian Behavior ──► BehaviorTree (Selector, Sequence, Condition, Action)
 
 EnemyAI memakai: AIPerception, AIMemory, Health, HitFlash, NavMeshAgent
 
@@ -37,6 +38,8 @@ ProximityInteractable (abstract)
  ├── KeyPickup
  ├── LockedDoor
  └── ArtifactPickup
+
+Objek navigasi level: SpikeTrap (Area Cost), Portcullis (dynamic obstacle), NavMeshLink (balkon)
 ```
 
 Struktur folder:
@@ -46,12 +49,17 @@ Assets/_DungeonHunter/
 ├── Editor/
 │   └── DungeonSceneBuilder.cs
 └── Scripts/
-    ├── AI/          AIPerception, AIMemory, EnemyAI, MeleeEnemy, RangedEnemy, Projectile
+    ├── AI/          AIPerception, AIMemory, EnemyAI, MeleeEnemy, RangedEnemy, Projectile,
+    │                BehaviorTree, GuardianEnemy
     ├── Core/        Health, NoiseSystem, HitFlash, GameManager, GameHUD
-    ├── DebugTools/  AIDebugManager, EnemyDebugVisual
-    ├── Gameplay/    ProximityInteractable, KeyPickup, LockedDoor, ArtifactPickup
+    ├── DebugTools/  AIDebugManager, EnemyDebugVisual, NavigationDebugVisual
+    ├── Gameplay/    ProximityInteractable, KeyPickup, LockedDoor, ArtifactPickup, Portcullis, SpikeTrap
     └── Player/      PlayerController, PlayerCombat, TopDownCamera
 ```
+
+Peta level:
+
+![Peta navigasi](Docs/images/peta_navigasi.png)
 
 ---
 
@@ -87,7 +95,8 @@ Feedback visual dengan mengubah warna badan sementara.
 Mengatur alur game.
 
 - Status game: `Playing`, `Won`, `Lost`
-- Progres objective: Key sudah didapat atau belum, pintu sudah terbuka atau belum
+- Progres objective: Key → pintu ruang Guardian → Guardian kalah → Artifact
+- Event `KeyCollected` (dipakai gerbang besi untuk menutup)
 - Teks objective dan pesan di layar
 - Jumlah kill dan timer
 - Tombol **R** untuk restart setelah menang atau kalah
@@ -180,6 +189,8 @@ Class dasar (abstract) semua enemy, berupa **Finite State Machine**.
 | `Chase` | Mengejar player yang terlihat |
 | `Attack` | Menyerang |
 | `Reposition` | Mundur untuk menjaga jarak |
+| `Flee` | Kabur ke Retreat Point saat HP rendah, lalu regen |
+| `Guard`, `Return`, `Enrage`, `Charge` | Khusus Guardian (diatur Behavior Tree) |
 | `Dead` | Badan jatuh lalu dinonaktifkan |
 
 **Perilaku umum:**
@@ -187,6 +198,24 @@ Class dasar (abstract) semua enemy, berupa **Finite State Machine**.
 - Kalau diserang dari belakang, enemy langsung memeriksa arah datangnya serangan
 - **Steering Separation**: enemy saling menjauh supaya tidak bertumpuk
 - Menyimpan data untuk debug: State, `Reason` (alasan keputusan), tujuan gerak, dan path
+
+**Flee / Retreat** (Melee & Ranged):
+
+- Terpicu sekali saat HP ≤ **30%**, dari state apa pun
+- Retreat Point dipilih berdasarkan **panjang path NavMesh** (bukan garis lurus): titik dianggap aman kalau path enemy ke sana lebih pendek daripada path player, lalu dipilih yang paling jauh dari player
+- Sampai di titik aman → diam, menghadap player, regen **8 HP/detik**
+- HP ≥ **70%** → kembali memburu (Investigate) kalau masih ingat LKP, kalau tidak → Patrol
+- **Terpojok** (player < 2.2 m) → berhenti kabur dan melawan balik
+
+**Navigation:**
+
+| Fitur | Cara kerja |
+|---|---|
+| Area Cost | `agent.SetAreaCost(Trap, trapAreaCost)` per enemy: Melee 5, Archer 8, Guardian 1. Pathfinding menghindari jebakan selama jalan memutar lebih murah |
+| NavMeshLink | `autoTraverseOffMeshLink = false`; saat agent tiba di link, enemy melompat sendiri dengan lintasan **parabola** lalu `CompleteOffMeshLink()` |
+| Partial path | `pathStatus == PathPartial` → tujuan tidak bisa dicapai: berjalan ke ujung path (titik terdekat), menunggu 2 detik sambil menghadap tujuan, lalu Search |
+| Panjang path | `PathLength(from, to)` menghitung panjang path NavMesh memakai area cost enemy tersebut (dipakai Flee) |
+| Repath | Saat NavMesh berubah (gerbang menutup), NavMeshAgent otomatis menghitung ulang jalur |
 
 ### `MeleeEnemy`
 `Scripts/AI/MeleeEnemy.cs`
@@ -204,7 +233,7 @@ FSM Melee:
 ### `RangedEnemy`
 `Scripts/AI/RangedEnemy.cs`
 
-**Ranged AI + Maintain Distance** - Skeleton Archer (×3).
+**Ranged AI + Maintain Distance** - Skeleton Archer (×2, salah satunya berjaga di balkon).
 
 Perilaku berdasarkan jarak ke player:
 
@@ -236,6 +265,40 @@ Panah / peluru archer.
 - Hancur saat mengenai dinding
 - Memberi damage ke player
 
+### `BehaviorTree`
+`Scripts/AI/BehaviorTree.cs`
+
+Framework Behavior Tree kecil (materi Pertemuan 6).
+
+| Node | Cara kerja |
+|---|---|
+| `BTSelector` | Coba child dari kiri ke kanan; berhenti di child pertama yang **Success** atau **Running** |
+| `BTSequence` | Jalankan child berurutan; berhenti di child pertama yang tidak **Success** |
+| `BTCondition` | Leaf yang mengecek kondisi → Success / Failure |
+| `BTAction` | Leaf yang menjalankan perilaku → Success / Failure / Running |
+
+`BTContext` mencatat **jalur node yang aktif** (contoh `Root > Ground Slam > Slam`) untuk ditampilkan di AI Debug Mode.
+
+### `GuardianEnemy`
+`Scripts/AI/GuardianEnemy.cs`
+
+**Guardian Behavior** — Crypt Guardian (×1), boss penjaga Artifact. Turunan `EnemyAI`, tapi keputusannya memakai **Behavior Tree** (bukan FSM).
+
+![Behavior Tree Guardian](Docs/images/bt_guardian.png)
+
+| Cabang | Kondisi | Aksi |
+|---|---|---|
+| Phase 2 | HP ≤ 50% dan belum enrage | **Enrage**: diam 1.2 detik, kecepatan ×1.4, cooldown slam ×0.7 |
+| Leash | Player keluar arena (> 10 m dari pos) | **Kembali ke pos** + regen 15 HP/detik |
+| Ground Slam | Jarak ≤ 2.6 m dan cooldown siap | Windup 0.8 detik (merah) → damage area 3 m, 25 damage |
+| Charge | Phase 2, melihat player, jarak 4.5–10 m, cooldown siap | Windup 0.6 detik (oranye) → menerjang 0.8 detik, 20 damage |
+| Kejar | Player / LKP berada di dalam arena | Kejar player atau menuju LKP |
+| Jaga pos | — (fallback) | Berjaga di pos sambil melihat sekeliling |
+
+- Enrage, Slam, dan Charge bersifat **committed**: sekali mulai, diselesaikan dulu
+- Guardian tidak mengejar keluar arena, sehingga player bisa mundur untuk mengatur ulang posisi (tapi Guardian memulihkan HP)
+- Area Trap cost 1 → Guardian tidak peduli jebakan
+
 ---
 
 ## 5. Gameplay
@@ -253,7 +316,7 @@ Dungeon Key. Didapat begitu player mendekat.
 ### `LockedDoor`
 `Scripts/Gameplay/LockedDoor.cs`
 
-Pintu ruang Artifact.
+Pintu ruang Guardian (tempat Artifact).
 
 - Tanpa Key: muncul pesan "Pintu terkunci"
 - Dengan Key: pintu turun ke lantai dan NavMesh di situ terbuka (lewat `NavMeshObstacle` carve)
@@ -262,7 +325,29 @@ Pintu ruang Artifact.
 ### `ArtifactPickup`
 `Scripts/Gameplay/ArtifactPickup.cs`
 
-Ancient Artifact. Diambil → **WIN**.
+Ancient Artifact.
+
+- **Tersegel** (lingkaran ungu) selama Guardian masih hidup
+- Setelah Guardian kalah → diambil → **WIN**
+
+### `Portcullis`
+`Scripts/Gameplay/Portcullis.cs`
+
+Gerbang besi antara hall dan ruang timur — **dynamic obstacle**.
+
+- Awalnya terbuka
+- Saat Key diambil (event `KeyCollected`), gerbang naik menutup jalur dan `NavMeshObstacle` (carve) aktif
+- NavMesh berubah → semua enemy otomatis **repath** lewat koridor selatan
+- Player juga harus keluar lewat koridor selatan
+
+### `SpikeTrap`
+`Scripts/Gameplay/SpikeTrap.cs`
+
+Jebakan duri di tengah hall — **Area Cost**.
+
+- Lantainya ditandai area NavMesh **`Trap`** (cost tinggi) lewat `NavMeshModifierVolume`, sehingga enemy memilih jalan memutar
+- Siklus: diam 1.6 detik → peringatan 0.5 detik (duri muncul sedikit) → aktif 0.8 detik
+- Saat aktif, melukai **siapa pun** di atasnya (15 damage), player maupun enemy
 
 Alur gameplay:
 
@@ -285,8 +370,11 @@ Menampilkan panel di atas setiap enemy, berisi:
 - **Can See**, beserta alasannya kalau tidak melihat
 - Distance
 - Destination
-- Path
+- Path (status + panjang path dalam meter)
+- Nav: area NavMesh di bawah kaki (`Walkable` / `Trap`) atau `LOMPAT via NavMeshLink`
 - Last Known Position beserta sumber infonya
+- Saat Flee: Retreat Point yang dipilih beserta perbandingan panjang path enemy vs player
+- Khusus Guardian: jalur node **Behavior Tree** yang aktif, Phase, dan jarak Leash
 
 Contoh panel (screenshot dari game, tekan **F1**):
 
@@ -317,6 +405,22 @@ Garis yang terlihat langsung di **Game view** (bukan hanya Scene view):
 | Last Known Position | Magenta |
 | Attack range melee | Merah |
 | Batas jarak 5–9 m archer | Oranye |
+| Leash arena Guardian | Ungu |
+| Radius Ground Slam | Merah (terang saat windup) |
+| Arah Charge Guardian | Oranye tebal |
+| Garis ke Retreat Point saat Flee | Hijau |
+
+### `NavigationDebugVisual`
+`Scripts/DebugTools/NavigationDebugVisual.cs`
+
+Visual navigasi level (ikut F1):
+
+| Garis | Warna |
+|---|---|
+| Zona Trap (area cost tinggi) | Kotak merah bersilang |
+| NavMeshLink (lompat turun balkon) | Panah putih melengkung |
+| Retreat Point | Lingkaran hijau |
+| Gerbang besi | Abu-abu (terbuka) / merah (tertutup) |
 
 ---
 
@@ -329,12 +433,13 @@ Membangun seluruh scene otomatis dari peta teks. Jalankan lewat menu **Dungeon H
 
 Yang dibuat:
 
-- Lantai dan dinding
-- Bake NavMesh
-- Obor (lampu)
+- Lantai, dinding, balkon 1.4 m + ramp
+- Volume area `Trap` lalu bake NavMesh
+- NavMeshLink lompat turun dari balkon
+- Jebakan duri, gerbang besi, obor (lampu)
 - Player dan kamera
-- 2 Melee dan 3 Ranged
-- Key, pintu, Artifact
+- 2 Melee, 2 Ranged, 1 Guardian, Retreat Point
+- Key, pintu, Artifact (bersegel)
 - Material dan prefab Projectile
 
 Legenda peta (1 karakter = 1 kotak 2×2 m):
@@ -346,11 +451,17 @@ Legenda peta (1 karakter = 1 kotak 2×2 m):
 | `P` | Spawn player |
 | `M` | Melee enemy |
 | `R` | Ranged enemy |
+| `G` | Guardian |
 | `K` | Dungeon Key |
-| `D` | Pintu ruang Artifact |
+| `D` | Pintu ruang Guardian |
 | `A` | Artifact |
 | `w` | Waypoint patroli |
+| `S` | Retreat Point (tujuan Flee) |
+| `T` | Jebakan duri (area `Trap`) |
+| `g` | Gerbang besi |
 | `L` | Obor / lampu |
+
+Balkon dan ramp didefinisikan lewat konstanta di builder (bukan karakter peta).
 
 Bentuk dungeon cukup diubah dengan mengedit peta teks di file itu, lalu menjalankan menu tersebut lagi.
 
@@ -360,9 +471,9 @@ Bentuk dungeon cukup diubah dengan mengedit peta teks di file itu, lalu menjalan
 
 ### Gameplay
 
-- Dungeon dengan 5 ruangan dan koridor, plus pilar sebagai penghalang pandangan
+- Dungeon dengan 5 ruangan, balkon, koridor selatan, pilar penghalang pandangan, jebakan duri, dan gerbang besi
 - Player bisa bergerak, sprint, dan menyerang dengan pedang
-- Alur: cari Key → buka pintu → ambil Artifact → **WIN**; HP habis → **LOSE**; tekan **R** untuk main lagi
+- Alur: cari Key → buka pintu → kalahkan Guardian → ambil Artifact → **WIN**; HP habis → **LOSE**; tekan **R** untuk main lagi
 - HUD, pesan objective, dan feedback saat kena damage
 
 ### AI (materi Pertemuan 1–7)
@@ -371,9 +482,10 @@ Bentuk dungeon cukup diubah dengan mengedit peta teks di file itu, lalu menjalan
 |---|---|
 | Perception | Jarak, FOV, Line of Sight, pendengaran |
 | Memory | Last Known Position, masa kadaluarsa ingatan |
-| Decision | FSM dengan 7 state |
+| Decision | FSM (Melee, Ranged) + Behavior Tree (Guardian) |
 | Movement | NavMesh + steering separation |
-| Tactical | Maintain Distance |
+| Navigation | Area Cost, NavMeshLink, dynamic obstacle + repath, partial path, panjang path |
+| Tactical | Maintain Distance, Flee/Retreat, Guardian leash |
 | Debug | AI Debug Mode (F1): panel teks + garis visual |
 
 ### Fokus AI Topik 3
@@ -383,9 +495,9 @@ Bentuk dungeon cukup diubah dengan mengedit peta teks di file itu, lalu menjalan
 | Melee AI | ✅ Selesai |
 | Ranged AI | ✅ Selesai |
 | Maintain Distance | ✅ Selesai |
-| Flee / Retreat | ⬜ Progress 2 |
-| Navigation (lanjutan) | ⬜ Progress 2 |
-| Guardian Behavior | ⬜ Progress 2 |
+| Flee / Retreat | ✅ Selesai |
+| Navigation | ✅ Selesai |
+| Guardian Behavior | ✅ Selesai |
 
 ### Kontrol
 

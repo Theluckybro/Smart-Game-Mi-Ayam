@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.SceneManagement;
@@ -13,7 +14,7 @@ namespace DungeonHunter
 
     /// <summary>
     /// Mengatur gameplay loop:
-    /// START → cari Key → buka pintu → ambil Artifact → WIN
+    /// START → cari Key → buka pintu → kalahkan Guardian → ambil Artifact → WIN
     /// Player mati → LOSE
     /// </summary>
     public class GameManager : MonoBehaviour
@@ -26,6 +27,7 @@ namespace DungeonHunter
         public bool IsPlaying => State == GameState.Playing;
         public bool HasKey { get; private set; }
         public bool DoorOpened { get; private set; }
+        public bool GuardianDefeated { get; private set; }
         public Health PlayerHealth => playerHealth;
         public int EnemiesKilled { get; private set; }
         public float ElapsedTime { get; private set; }
@@ -33,12 +35,16 @@ namespace DungeonHunter
         public string LastMessage { get; private set; } = "";
         public float LastMessageTime { get; private set; } = -100f;
 
+        /// <summary>Dipanggil saat Key diambil (dipakai gerbang besi / dynamic obstacle).</summary>
+        public event Action KeyCollected;
+
         public string Objective
         {
             get
             {
                 if (!HasKey) return "Cari Dungeon Key";
-                if (!DoorOpened) return "Buka pintu ruang Artifact (utara)";
+                if (!DoorOpened) return "Buka pintu ruang Guardian (utara)";
+                if (!GuardianDefeated) return "Kalahkan Crypt Guardian";
                 return "Ambil Ancient Artifact";
             }
         }
@@ -84,19 +90,28 @@ namespace DungeonHunter
 
         public void CollectKey()
         {
+            if (HasKey)
+                return;
             HasKey = true;
-            ShowMessage("Dungeon Key didapat! Buka pintu ruang Artifact.");
+            ShowMessage("Dungeon Key didapat! Buka pintu ruang Guardian.");
+            KeyCollected?.Invoke();
         }
 
         public void NotifyDoorOpened()
         {
             DoorOpened = true;
-            ShowMessage("Pintu terbuka! Ambil Artifact-nya.");
+            ShowMessage("Pintu terbuka... Guardian menunggu.");
         }
 
         public void NotifyEnemyKilled(EnemyAI enemy)
         {
             EnemiesKilled++;
+
+            if (enemy is GuardianEnemy)
+            {
+                GuardianDefeated = true;
+                ShowMessage("Guardian dikalahkan! Segel Artifact terbuka.");
+            }
         }
 
         public void CollectArtifact()
