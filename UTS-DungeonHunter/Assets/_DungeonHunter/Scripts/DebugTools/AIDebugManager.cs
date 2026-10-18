@@ -13,6 +13,8 @@ namespace DungeonHunter
     {
         public static bool DebugEnabled { get; private set; }
 
+        public static void SetEnabled(bool value) => DebugEnabled = value;
+
         [SerializeField] private bool enabledOnStart;
 
         private GUIStyle panelStyle;

@@ -177,7 +177,7 @@ namespace DungeonHunter.EditorTools
             var managers = new GameObject("Managers");
             var gm = managers.AddComponent<GameManager>();
             SetField(gm, "playerHealth", player.GetComponent<Health>());
-            managers.AddComponent<GameHUD>();
+            managers.AddComponent<DungeonHunter.UI.GameUI>();
             managers.AddComponent<AIDebugManager>();
             var vfx = managers.AddComponent<VFXManager>();
             SetField(vfx, "additive", VFXAssets.Additive);

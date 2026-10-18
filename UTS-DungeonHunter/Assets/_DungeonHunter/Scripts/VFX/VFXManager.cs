@@ -483,6 +483,8 @@ namespace DungeonHunter
                 target = slowMoScale;
             if (Time.unscaledTime < hitStopUntil)
                 target = 0.02f;
+            if (GameManager.Instance != null && GameManager.Instance.State == GameState.Paused)
+                target = 0f;
             Time.timeScale = target;
 
             texts.RemoveAll(t => Time.unscaledTime - t.Born > t.Life || (t.Follow != null && !t.Follow.gameObject.activeInHierarchy));

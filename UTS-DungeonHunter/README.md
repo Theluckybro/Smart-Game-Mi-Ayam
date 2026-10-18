@@ -42,6 +42,7 @@ mengalahkan **Crypt Guardian**, lalu mengambil **Ancient Artifact**.
 | Klik kiri / Space | Serang (pedang) |
 | Shift | Sprint (lebih berisik → terdengar enemy) |
 | **F1** | **AI Debug Mode** |
+| Esc | Pause / lanjutkan |
 | R | Main lagi (setelah menang / kalah) |
 
 ## Gameplay loop
@@ -126,7 +127,7 @@ Retreat Point, dan status gerbang besi.
 
 **Progress 1**
 - [x] Level dungeon playable & NavMesh
-- [x] Player controller, melee combat, HP, Win & Lose, HUD
+- [x] Player controller, melee combat, HP, Win & Lose
 - [x] Perception (vision + hearing) & Memory
 - [x] FSM decision making + steering separation
 - [x] Melee AI, Ranged AI, Maintain Distance
@@ -148,8 +149,13 @@ Retreat Point, dan status gerbang besi.
 - [x] Telegraph serangan (lingkaran Slam, garis Charge, bola energi Mage), busur tebasan
 - [x] Shockwave, debu, puing tulang/batu, aura Enrage, trail proyektil, obor & kilau objective
 
+**UI**
+- [x] Main menu (kamera mengorbit dungeon), Cara Bermain, Pause, layar Victory / Defeat dengan statistik
+- [x] HUD uGUI: bar HP dengan efek *chip*, slot Key, checklist objective, toast pesan, bar HP boss + fase
+- [x] Vignette merah saat kena damage & berdenyut saat HP kritis, bar HP di atas enemy
+
 **Sisa (polish)**
-- [ ] Audio (SFX & ambience), UI final (main menu, HUD uGUI), video demo
+- [ ] Audio (SFX & ambience), video demo
 
 ## VFX
 
@@ -170,6 +176,28 @@ Semua VFX dibuat prosedural lewat kode (tanpa aset tambahan). Tekstur partikel d
 | Kematian | Pecahan tulang memantul di lantai + asap; Guardian: cincin besar + slow-motion |
 | Regen (Flee / Return) | Partikel hijau naik |
 | Level | Obor berkedip + bara, debu sprint / mendarat / jebakan / gerbang, kilau Key & Artifact, ledakan pickup |
+
+## UI
+
+| Main menu | Cara bermain |
+|---|---|
+| ![Main menu](Docs/images/screenshot_ui_main_menu.png) | ![Cara bermain](Docs/images/screenshot_ui_how_to.png) |
+
+| HUD | HP kritis |
+|---|---|
+| ![HUD](Docs/images/screenshot_ui_hud.png) | ![HP kritis](Docs/images/screenshot_ui_low_hp.png) |
+
+| Bar boss (Phase 2) | Pause |
+|---|---|
+| ![Boss](Docs/images/screenshot_ui_boss_bar.png) | ![Pause](Docs/images/screenshot_ui_pause.png) |
+
+| Victory | Defeat |
+|---|---|
+| ![Victory](Docs/images/screenshot_ui_victory.png) | ![Defeat](Docs/images/screenshot_ui_defeat.png) |
+
+Seluruh UI dibangun lewat kode saat runtime (`Scripts/UI/GameUI.cs`) memakai uGUI; sprite panel, tombol,
+bar, dan vignette di-generate prosedural oleh `Scripts/UI/UIKit.cs`, jadi tidak ada aset UI tambahan.
+Animasi UI (fade, slide, pop) memakai *unscaled time* sehingga tetap jalan saat game di-pause.
 
 ## Aset & kredit
 

@@ -12,8 +12,9 @@ Semua script berada di `Assets/_DungeonHunter/`.
 5. [Gameplay — objective](#5-gameplay--objective)
 6. [DebugTools — AI Debug Mode](#6-debugtools--ai-debug-mode)
 7. [VFX — game juice](#vfx--game-juice)
-8. [Editor — pembuat scene](#7-editor--pembuat-scene)
-9. [Ringkasan fitur](#8-ringkasan-fitur)
+8. [UI — antarmuka](#ui--antarmuka)
+9. [Editor — pembuat scene](#7-editor--pembuat-scene)
+10. [Ringkasan fitur](#8-ringkasan-fitur)
 
 ---
 
@@ -57,9 +58,10 @@ Assets/_DungeonHunter/
 └── Scripts/
     ├── AI/          AIPerception, AIMemory, EnemyAI, MeleeEnemy, RangedEnemy, Projectile,
     │                BehaviorTree, GuardianEnemy
-    ├── Core/        Health, NoiseSystem, HitFlash, CharacterAnimator, GameManager, GameHUD
+    ├── Core/        Health, NoiseSystem, HitFlash, CharacterAnimator, GameManager
     ├── DebugTools/  AIDebugManager, EnemyDebugVisual, NavigationDebugVisual
     ├── Gameplay/    ProximityInteractable, KeyPickup, LockedDoor, ArtifactPickup, Portcullis, SpikeTrap
+    ├── UI/          GameUI, UIKit, UIButtonFX
     ├── VFX/         VFXManager, SlashArc, TelegraphLine, DamageFeedback, TorchFX, AmbientSparkles
     └── Player/      PlayerController, PlayerCombat, TopDownCamera
 ```
@@ -119,23 +121,13 @@ CharacterController, lompatan NavMeshLink, maupun Charge Guardian.
 
 Mengatur alur game.
 
-- Status game: `Playing`, `Won`, `Lost`
-- Progres objective: Key → pintu ruang Guardian → Guardian kalah → Artifact
+- Status game: `Menu`, `Playing`, `Paused`, `Won`, `Lost`; setiap perubahan dikirim lewat event `StateChanged` (didengar UI)
+- `StartGame()`, `Pause()`, `Resume()`, `Restart()`, `Quit()` — dipanggil tombol UI; **Esc** untuk pause
+- Saat `Paused`, `VFXManager` membuat `Time.timeScale = 0` sehingga AI, fisika, dan animasi berhenti
+- Progres objective (`ObjectiveStep` 0–4): Key → pintu ruang Guardian → Guardian kalah → Artifact
 - Event `KeyCollected` (dipakai gerbang besi untuk menutup)
-- Teks objective dan pesan di layar
-- Jumlah kill dan timer
-- Tombol **R** untuk restart setelah menang atau kalah
-
-### `GameHUD`
-`Scripts/Core/GameHUD.cs`
-
-Tampilan layar (sementara memakai IMGUI).
-
-- Bar HP, objective, status Key, kill, waktu
-- Pesan objective di tengah atas layar
-- Layar berkedip merah saat player kena damage
-- Bar HP kecil di atas enemy yang sudah terluka
-- Layar **VICTORY** / **DEFEAT**
+- Teks objective dan pesan di layar, jumlah kill, timer, total damage yang diterima
+- Tombol **R** untuk restart setelah menang atau kalah (langsung main, tanpa main menu)
 
 ---
 
@@ -167,6 +159,9 @@ Akibatnya, sprint lebih mudah ketahuan enemy.
 `Scripts/Player/TopDownCamera.cs`
 
 Kamera dari atas yang mengikuti player.
+
+- Camera shake berbasis *trauma* (`TopDownCamera.Shake`)
+- Saat main menu, kamera mengorbit perlahan di atas dungeon, lalu transisi halus ke player saat **MULAI**
 
 ---
 
@@ -510,6 +505,52 @@ lalu material partikel additive / alpha blended / debris.
 
 ---
 
+## UI — antarmuka
+
+Semua UI dibuat lewat kode saat runtime dengan uGUI. Tidak ada prefab atau gambar UI dari luar.
+
+![Main menu](Docs/images/screenshot_ui_main_menu.png)
+
+### `GameUI`
+`Scripts/UI/GameUI.cs`
+
+Membangun Canvas (Scale With Screen Size 1920×1080) dan semua layar, lalu menampilkan/menyembunyikannya
+berdasarkan `GameManager.StateChanged`. Setiap layar adalah `CanvasGroup` yang di-fade dengan *unscaled time*.
+
+| Layar | Isi |
+|---|---|
+| Main menu | Judul, tombol **MULAI / CARA BERMAIN / KELUAR**, kredit; kamera mengorbit dungeon di belakang |
+| Cara bermain | 3 kolom: kontrol, objective, tips melawan AI |
+| HUD | Panel HP (bar + efek *chip* putih yang menyusut pelan), slot Key yang menyala, checklist objective (✓ saat selesai), waktu & kill, baris kontrol |
+| Toast | Pesan objective meluncur dari atas lalu memudar |
+| Bar boss | Muncul saat pintu terbuka & Guardian bertarung; menampilkan **PHASE 1** / **PHASE 2 · ENRAGED** |
+| Bar HP enemy | Bar kecil di atas kepala enemy yang terluka |
+| Vignette | Kilatan merah saat kena damage, berdenyut seperti detak jantung saat HP < 30% |
+| Pause | **LANJUTKAN**, **ULANGI**, toggle **AI DEBUG**, **MENU UTAMA** |
+| Victory / Defeat | Judul "pop" setelah jeda 1.2 detik, statistik (waktu, kill, damage diterima), **MAIN LAGI** / **MENU UTAMA** |
+
+Juga memastikan ada `EventSystem` dengan `InputSystemUIInputModule` (proyek memakai New Input System).
+
+### `UIKit`
+`Scripts/UI/UIKit.cs`
+
+Toolkit kecil untuk `GameUI`:
+
+- Palet warna tema *dark fantasy* (emas, merah tua, ungu boss)
+- Sprite prosedural: panel bersudut membulat dengan bingkai emas (9-slice), tombol, bar, lingkaran, vignette, glow
+- Helper: `NewRect`, `Stretch`, `AddImage`, `AddText`, `MakeButton`, `MakeBar`, `SetBar`
+
+### `UIButtonFX`
+`Scripts/UI/UIButtonFX.cs`
+
+Efek tombol: membesar dan teks memutih saat di-hover, "punch" kecil saat diklik. Tetap jalan saat pause.
+
+| HUD | Pause | Victory |
+|---|---|---|
+| ![HUD](Docs/images/screenshot_ui_hud.png) | ![Pause](Docs/images/screenshot_ui_pause.png) | ![Victory](Docs/images/screenshot_ui_victory.png) |
+
+---
+
 ## 7. Editor
 
 ### `DungeonSceneBuilder`
@@ -589,7 +630,8 @@ Bentuk dungeon cukup diubah dengan mengedit peta teks di file itu, lalu menjalan
 - Dungeon dengan 5 ruangan, balkon, koridor selatan, pilar penghalang pandangan, jebakan duri, dan gerbang besi
 - Player bisa bergerak, sprint, dan menyerang dengan pedang
 - Alur: cari Key → buka pintu → kalahkan Guardian → ambil Artifact → **WIN**; HP habis → **LOSE**; tekan **R** untuk main lagi
-- HUD, pesan objective, dan feedback saat kena damage
+- Main menu, cara bermain, pause, layar Victory / Defeat
+- HUD (HP, Key, checklist objective, bar boss), toast pesan, dan vignette saat kena damage
 
 ### AI (materi Pertemuan 1–7)
 
@@ -623,4 +665,5 @@ Bentuk dungeon cukup diubah dengan mengedit peta teks di file itu, lalu menjalan
 | Klik kiri / Space | Serang |
 | Shift | Sprint (lebih berisik) |
 | F1 | AI Debug Mode |
+| Esc | Pause / lanjutkan |
 | R | Main lagi (setelah menang / kalah) |
