@@ -70,6 +70,7 @@ namespace DungeonHunter
                     bool inRange = dir.magnitude <= attackRange + 0.4f;
                     bool inFront = Vector3.Angle(transform.forward, dir) <= 60f;
 
+                    VFXManager.Slash(transform, new Color(1f, 0.35f, 0.2f), attackRange + 0.3f, 110f, 1f);
                     if (inRange && inFront && targetHealth != null)
                         targetHealth.TakeDamage(attackDamage, transform.position);
                 }
@@ -88,6 +89,8 @@ namespace DungeonHunter
                 isWindingUp = true;
                 windupTimer = attackWindup;
                 PlayAttackAnimation();
+                VFXManager.Telegraph(transform.position + transform.forward * (attackRange * 0.55f), attackRange * 0.6f,
+                    attackWindup, new Color(1f, 0.25f, 0.15f));
                 hitFlash?.Flash(windupColor, attackWindup);
             }
         }

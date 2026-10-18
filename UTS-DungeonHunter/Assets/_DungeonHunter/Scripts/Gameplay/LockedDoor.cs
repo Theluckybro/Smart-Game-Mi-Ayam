@@ -60,6 +60,10 @@ namespace DungeonHunter
 
             opening = true;
             NoiseSystem.Emit(transform.position, 12f);
+            for (int i = -1; i <= 1; i++)
+                VFXManager.Smoke(transform.position + transform.right * (i * 1.4f) + Vector3.up * 0.2f,
+                    new Color(0.45f, 0.42f, 0.4f, 0.8f), 5, 1.1f, 1.5f);
+            VFXManager.Shake(0.25f);
             GameManager.Instance.NotifyDoorOpened();
         }
     }

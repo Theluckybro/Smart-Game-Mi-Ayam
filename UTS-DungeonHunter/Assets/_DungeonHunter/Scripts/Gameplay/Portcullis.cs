@@ -54,6 +54,13 @@ namespace DungeonHunter
             gateCollider.enabled = true;
             obstacle.enabled = true;
             NoiseSystem.Emit(transform.position, 14f);
+            for (int i = -1; i <= 1; i++)
+            {
+                Vector3 p = transform.position + Vector3.forward * (i * 1.4f) + Vector3.up * 0.2f;
+                VFXManager.Smoke(p, new Color(0.45f, 0.42f, 0.4f, 0.85f), 6, 1.2f, 2f);
+                VFXManager.Sparks(p, Vector3.up, new Color(1f, 0.75f, 0.4f), 5, 5f, 0.8f);
+            }
+            VFXManager.Shake(0.4f);
             if (GameManager.Instance != null)
                 GameManager.Instance.ShowMessage("Gerbang besi tertutup! Keluar lewat koridor selatan.");
         }

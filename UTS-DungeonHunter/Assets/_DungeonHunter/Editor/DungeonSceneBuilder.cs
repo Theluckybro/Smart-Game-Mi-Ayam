@@ -135,6 +135,7 @@ namespace DungeonHunter.EditorTools
             EnsureFolder(PrefabDir);
             CreateMaterials();
             KK.Init();
+            VFXAssets.Create();
 
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
@@ -178,6 +179,13 @@ namespace DungeonHunter.EditorTools
             SetField(gm, "playerHealth", player.GetComponent<Health>());
             managers.AddComponent<GameHUD>();
             managers.AddComponent<AIDebugManager>();
+            var vfx = managers.AddComponent<VFXManager>();
+            SetField(vfx, "additive", VFXAssets.Additive);
+            SetField(vfx, "alphaBlend", VFXAssets.AlphaBlend);
+            SetField(vfx, "ring", VFXAssets.Ring);
+            SetField(vfx, "telegraph", VFXAssets.Telegraph);
+            SetField(vfx, "debris", VFXAssets.Debris);
+            SetField(vfx, "line", VFXAssets.Line);
 
             CreateCamera(player.transform);
 
@@ -467,6 +475,10 @@ namespace DungeonHunter.EditorTools
                     light.color = new Color(1f, 0.6f, 0.25f);
                     light.range = 11f;
                     light.intensity = 4.5f;
+
+                    var torchFx = go.AddComponent<TorchFX>();
+                    SetField(torchFx, "torchLight", light);
+                    SetField(torchFx, "flame", flame.transform);
                 }
         }
 
@@ -688,6 +700,7 @@ namespace DungeonHunter.EditorTools
             });
 
             player.AddComponent<HitFlash>();
+            AddDamageFeedback(player, true, false, new Color(1f, 0.45f, 0.3f), new Color(0.6f, 0.6f, 0.68f), 7f, 1.2f);
             player.AddComponent<PlayerController>();
             player.AddComponent<PlayerCombat>();
             return player;
@@ -749,6 +762,8 @@ namespace DungeonHunter.EditorTools
                 LeftWeapon = "Skeleton_Shield_Small_A", LeftWeaponSize = 0.38f
             });
             e.GetComponent<AIPerception>().Configure(9f, 110f);
+            AddDamageFeedback(e.gameObject, false, false, BoneSpark, BoneDebris, 6f, 1.1f);
+            SetField(e, "alertHeight", 2.6f);
             return e;
         }
 
@@ -769,6 +784,9 @@ namespace DungeonHunter.EditorTools
             var e = CreateEnemyBase<RangedEnemy>(parent, $"Ranged_{index}", pos, 0.45f, 2f, 45f, spec);
             e.GetComponent<AIPerception>().Configure(12f, 100f);
             SetField(e, "trapAreaCost", 8f);
+            SetField(e, "fxColor", crossbow ? ArrowColor : MagicColor);
+            AddDamageFeedback(e.gameObject, false, false, BoneSpark, BoneDebris, 6f, 1.1f);
+            SetField(e, "alertHeight", 2.6f);
 
             var muzzle = new GameObject("FirePoint").transform;
             muzzle.SetParent(e.transform, false);
@@ -790,6 +808,9 @@ namespace DungeonHunter.EditorTools
             SetField(g, "chaseSpeed", 3.2f);
             SetField(g, "patrolSpeed", 1.8f);
             SetField(g, "trapAreaCost", 1f);
+            SetField(g, "knockbackScale", 0.08f);
+            SetField(g, "alertHeight", 4f);
+            AddDamageFeedback(g.gameObject, false, true, new Color(0.85f, 0.6f, 1f), new Color(0.6f, 0.45f, 0.75f), 6f, 1.8f);
             return g;
         }
 
@@ -800,8 +821,10 @@ namespace DungeonHunter.EditorTools
             Object.DestroyImmediate(go.GetComponent<Collider>());
             go.transform.localScale = Vector3.one * 0.3f;
             go.GetComponent<Renderer>().sharedMaterial = Materials["Projectile"];
-            go.AddComponent<Projectile>();
-            AddProjectileLight(go, new Color(0.7f, 0.4f, 1f));
+            var projectile = go.AddComponent<Projectile>();
+            SetField(projectile, "fxColor", MagicColor);
+            AddProjectileLight(go, MagicColor);
+            AddTrail(go, MagicColor, 0.35f, 0.3f);
             return SavePrefab(go, "Projectile_Magic");
         }
 
@@ -825,9 +848,44 @@ namespace DungeonHunter.EditorTools
             b = KK.RendererBounds(holder.gameObject);
             holder.localPosition -= b.center - go.transform.position;
 
-            go.AddComponent<Projectile>();
-            AddProjectileLight(go, new Color(1f, 0.7f, 0.3f));
+            var projectile = go.AddComponent<Projectile>();
+            SetField(projectile, "fxColor", ArrowColor);
+            AddProjectileLight(go, ArrowColor);
+            AddTrail(go, ArrowColor, 0.15f, 0.22f);
             return SavePrefab(go, "Projectile_Arrow");
+        }
+
+        private static readonly Color MagicColor = new Color(0.75f, 0.4f, 1f);
+        private static readonly Color ArrowColor = new Color(1f, 0.65f, 0.3f);
+        private static readonly Color BoneSpark = new Color(1f, 0.92f, 0.65f);
+        private static readonly Color BoneDebris = new Color(0.92f, 0.88f, 0.78f);
+
+        private static void AddDamageFeedback(GameObject go, bool isPlayer, bool isBoss, Color spark, Color debris,
+            float knockback, float bodyHeight)
+        {
+            var fb = go.AddComponent<DamageFeedback>();
+            SetField(fb, "isPlayer", isPlayer);
+            SetField(fb, "isBoss", isBoss);
+            SetField(fb, "sparkColor", spark);
+            SetField(fb, "debrisColor", debris);
+            SetField(fb, "knockback", knockback);
+            SetField(fb, "bodyHeight", bodyHeight);
+        }
+
+        /// <summary>Jejak cahaya di belakang proyektil.</summary>
+        private static void AddTrail(GameObject go, Color color, float width, float time)
+        {
+            var trail = go.AddComponent<TrailRenderer>();
+            trail.sharedMaterial = VFXAssets.Trail;
+            trail.time = time;
+            trail.minVertexDistance = 0.05f;
+            trail.widthCurve = new AnimationCurve(new Keyframe(0f, width), new Keyframe(1f, 0f));
+            var g = new Gradient();
+            g.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(color, 0.25f), new GradientColorKey(color, 1f) },
+                new[] { new GradientAlphaKey(1f, 0f), new GradientAlphaKey(0f, 1f) });
+            trail.colorGradient = g;
+            trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            trail.receiveShadows = false;
         }
 
         private static void AddProjectileLight(GameObject go, Color color)
@@ -873,6 +931,11 @@ namespace DungeonHunter.EditorTools
             var pickup = key.AddComponent<KeyPickup>();
             SetField(pickup, "visual", visual);
             SetField(pickup, "interactRadius", 1.4f);
+
+            var sparkles = key.AddComponent<AmbientSparkles>();
+            SetField(sparkles, "color", new Color(1f, 0.85f, 0.3f));
+            SetField(sparkles, "height", 1f);
+            SetField(sparkles, "radius", 0.6f);
         }
 
         /// <summary>
@@ -940,6 +1003,12 @@ namespace DungeonHunter.EditorTools
             SetField(pickup, "visual", visual);
             SetField(pickup, "sealVisual", seal);
             SetField(pickup, "interactRadius", 1.6f);
+
+            var sparkles = artifact.AddComponent<AmbientSparkles>();
+            SetField(sparkles, "color", new Color(0.4f, 0.95f, 1f));
+            SetField(sparkles, "height", 1.6f);
+            SetField(sparkles, "radius", 0.9f);
+            SetField(sparkles, "rate", 16f);
         }
 
         /// <summary>Gerbang besi antara hall dan ruang timur (dynamic obstacle, menutup saat Key diambil).</summary>
@@ -1028,6 +1097,7 @@ namespace DungeonHunter.EditorTools
                 case int i: prop.intValue = i; break;
                 case bool b: prop.boolValue = b; break;
                 case Object o: prop.objectReferenceValue = o; break;
+                case Color col: prop.colorValue = col; break;
                 default: throw new ArgumentException($"Tipe {value?.GetType()} belum didukung");
             }
 

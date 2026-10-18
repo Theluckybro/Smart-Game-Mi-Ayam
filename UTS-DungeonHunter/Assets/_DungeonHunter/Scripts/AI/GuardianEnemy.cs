@@ -60,6 +60,12 @@ namespace DungeonHunter
         private float nextSlamTime;
         private float nextChargeTime;
         private Vector3 chargeDirection;
+        private float nextDustTime;
+        private ParticleSystem enrageAura;
+
+        private static readonly Color SlamColor = new Color(1f, 0.35f, 0.15f);
+        private static readonly Color EnrageColor = new Color(0.75f, 0.35f, 1f);
+        private static readonly Color ChargeLineColor = new Color(1f, 0.55f, 0.1f);
 
         public float LeashRadius => leashRadius;
         public float SlamRadius => slamRadius;
@@ -182,6 +188,15 @@ namespace DungeonHunter
                 if (hitFlash != null)
                     hitFlash.Flash(enrageColor, enrageDuration);
                 NoiseSystem.Emit(transform.position, 15f);
+                VFXManager.Ring(transform.position, EnrageColor, 9f, 0.7f);
+                VFXManager.Ring(transform.position, Color.white, 4f, 0.35f);
+                VFXManager.Smoke(transform.position + Vector3.up * 0.2f, new Color(0.45f, 0.3f, 0.55f, 0.8f), 14, 1.3f, 4f);
+                VFXManager.Glow(transform.position + Vector3.up * 1.6f, EnrageColor, 6f, 0.4f);
+                VFXManager.Sparks(transform.position + Vector3.up * 1.5f, Vector3.up, EnrageColor, 30, 8f, 1.3f);
+                VFXManager.Shake(0.55f);
+                VFXManager.FloatingLabel(transform.position + Vector3.up * 4f, "ENRAGED!", EnrageColor, 36f);
+                if (enrageAura == null)
+                    enrageAura = VFXManager.Aura(transform, EnrageColor, 1.1f, 3f);
                 if (GameManager.Instance != null)
                     GameManager.Instance.ShowMessage("Guardian mengamuk! (Phase 2: lebih cepat + Charge)");
             }
@@ -204,6 +219,8 @@ namespace DungeonHunter
         {
             ChangeState(EnemyState.Return, "Player keluar arena → kembali ke pos & regen");
             health.Heal(returnRegenPerSecond * Time.deltaTime);
+            if (health.Normalized < 1f)
+                HealEffect();
             MoveTo(homePosition, "Pos Guardian");
 
             if (!agent.pathPending && agent.remainingDistance <= waypointTolerance)
@@ -225,6 +242,7 @@ namespace DungeonHunter
                 StopMoving();
                 ChangeState(EnemyState.Attack, "Player dalam jangkauan → Ground Slam");
                 PlayAttackAnimation();
+                VFXManager.Telegraph(transform.position, slamRadius, slamWindup, SlamColor);
                 if (hitFlash != null)
                     hitFlash.Flash(slamColor, slamWindup);
             }
@@ -242,6 +260,15 @@ namespace DungeonHunter
         private void Slam()
         {
             NoiseSystem.Emit(transform.position, 6f);
+
+            Vector3 p = transform.position;
+            VFXManager.Ring(p, SlamColor, slamRadius * 1.35f, 0.45f);
+            VFXManager.Ring(p, new Color(1f, 0.85f, 0.6f), slamRadius * 0.8f, 0.3f);
+            VFXManager.Glow(p + Vector3.up * 0.5f, SlamColor, 5f, 0.18f);
+            VFXManager.Smoke(p + Vector3.up * 0.2f, new Color(0.45f, 0.4f, 0.36f, 0.85f), 18, 1.4f, 5f);
+            VFXManager.Debris(p + Vector3.up * 0.3f, new Color(0.4f, 0.38f, 0.42f), 14, 6f, 0.18f);
+            VFXManager.Sparks(p + Vector3.up * 0.3f, Vector3.up, new Color(1f, 0.7f, 0.3f), 20, 7f, 1.4f);
+            VFXManager.Shake(target != null && Vector3.Distance(target.position, p) < 9f ? 0.6f : 0.3f);
             if (targetHealth == null)
                 return;
 
@@ -262,6 +289,8 @@ namespace DungeonHunter
                 actionTimer = chargeWindup;
                 StopMoving();
                 ChangeState(EnemyState.Charge, $"Phase 2, jarak {DistanceToTarget:0.0}m → Charge");
+                Vector3 toPlayer = target != null ? target.position - transform.position : transform.forward;
+                VFXManager.LineTelegraph(transform.position, toPlayer, chargeSpeed * chargeDuration + 1f, 1.8f, chargeWindup, ChargeLineColor);
                 if (characterAnimator != null)
                     characterAnimator.Attack2();
                 if (hitFlash != null)
@@ -288,6 +317,13 @@ namespace DungeonHunter
             if (agent.isOnNavMesh)
                 agent.Move(chargeDirection * chargeSpeed * Time.deltaTime);
 
+            if (Time.time >= nextDustTime)
+            {
+                nextDustTime = Time.time + 0.05f;
+                VFXManager.Smoke(transform.position + Vector3.up * 0.15f, new Color(0.5f, 0.45f, 0.4f, 0.75f), 2, 1f, 1.2f);
+                VFXManager.Sparks(transform.position + Vector3.up * 0.3f, -chargeDirection, ChargeLineColor, 2, 4f, 0.5f);
+            }
+
             if (!chargeHit && targetHealth != null)
             {
                 Vector3 diff = target.position - transform.position;
@@ -296,6 +332,8 @@ namespace DungeonHunter
                 {
                     chargeHit = true;
                     targetHealth.TakeDamage(chargeDamage, transform.position);
+                    VFXManager.HitStop(0.08f);
+                    VFXManager.Shake(0.5f);
                 }
             }
 

@@ -11,8 +11,9 @@ Semua script berada di `Assets/_DungeonHunter/`.
 4. [AI — inti mata kuliah](#4-ai--inti-mata-kuliah)
 5. [Gameplay — objective](#5-gameplay--objective)
 6. [DebugTools — AI Debug Mode](#6-debugtools--ai-debug-mode)
-7. [Editor — pembuat scene](#7-editor--pembuat-scene)
-8. [Ringkasan fitur](#8-ringkasan-fitur)
+7. [VFX — game juice](#vfx--game-juice)
+8. [Editor — pembuat scene](#7-editor--pembuat-scene)
+9. [Ringkasan fitur](#8-ringkasan-fitur)
 
 ---
 
@@ -49,7 +50,8 @@ Assets/_DungeonHunter/
 ├── Editor/
 │   ├── DungeonSceneBuilder.cs
 │   ├── KayKitImportSettings.cs
-│   └── KayKitVisuals.cs
+│   ├── KayKitVisuals.cs
+│   └── VFXAssets.cs
 ├── ThirdParty/KayKit/   model, animasi, tekstur KayKit (CC0)
 ├── Animation/           Animator Controller (dibuat otomatis oleh builder)
 └── Scripts/
@@ -58,6 +60,7 @@ Assets/_DungeonHunter/
     ├── Core/        Health, NoiseSystem, HitFlash, CharacterAnimator, GameManager, GameHUD
     ├── DebugTools/  AIDebugManager, EnemyDebugVisual, NavigationDebugVisual
     ├── Gameplay/    ProximityInteractable, KeyPickup, LockedDoor, ArtifactPickup, Portcullis, SpikeTrap
+    ├── VFX/         VFXManager, SlashArc, TelegraphLine, DamageFeedback, TorchFX, AmbientSparkles
     └── Player/      PlayerController, PlayerCombat, TopDownCamera
 ```
 
@@ -443,6 +446,67 @@ Visual navigasi level (ikut F1):
 | NavMeshLink (lompat turun balkon) | Panah putih melengkung |
 | Retreat Point | Lingkaran hijau |
 | Gerbang besi | Abu-abu (terbuka) / merah (tertutup) |
+
+---
+
+## VFX — game juice
+
+Semua efek dibuat prosedural lewat kode; tidak ada aset VFX dari luar.
+
+![VFX](Docs/images/screenshot_vfx.png)
+
+### `VFXManager`
+`Scripts/VFX/VFXManager.cs`
+
+Pusat semua efek. Delapan ParticleSystem bersama (world space) dipakai ulang lewat `Emit()`,
+sehingga efek bisa muncul di posisi mana pun tanpa membuat objek baru.
+
+| Sistem / fungsi | Dipakai untuk |
+|---|---|
+| `Sparks` | Percikan memanjang saat pukulan, tembakan, duri |
+| `Glow` | Kilatan cahaya (impact, moncong senjata, pickup) |
+| `Smoke` | Debu / asap (sprint, mendarat, Slam, gerbang, kematian) |
+| `Debris` | Pecahan tulang / batu (mesh kubus) yang memantul di lantai |
+| `Ring` | Shockwave melingkar di lantai |
+| `Telegraph` | Lingkaran peringatan yang membesar selama windup |
+| `ChargeUp` | Bola energi saat ranged membidik |
+| `Heal` | Partikel hijau saat regen |
+| `Slash` / `LineTelegraph` / `Aura` | Busur tebasan, garis jalur Charge, aura Enrage |
+| `DamageNumber` / `Alert` / `FloatingLabel` | Angka damage, ikon **! ? !!** di atas kepala, teks besar |
+| `HitStop` / `SlowMotion` / `Shake` | Membekukan waktu sesaat, slow-motion, camera shake |
+
+Semua method statis aman dipanggil walaupun VFXManager tidak ada di scene.
+
+### `SlashArc` dan `TelegraphLine`
+`Scripts/VFX/SlashArc.cs`, `Scripts/VFX/TelegraphLine.cs`
+
+- `SlashArc`: mesh busur prosedural yang menyapu kiri ke kanan, ujungnya paling terang, lalu memudar
+- `TelegraphLine`: garis di lantai yang berdenyut makin cepat menjelang Charge
+
+### `DamageFeedback`
+`Scripts/VFX/DamageFeedback.cs`
+
+Dipasang di player dan semua enemy. Mendengarkan event `Health`:
+
+- **Kena damage:** kilatan, percikan searah pukulan, angka damage, camera shake, knockback
+- **Mati:** pecahan tulang + asap. Khusus Guardian: cincin besar, slow-motion, label *GUARDIAN DEFEATED*
+
+### `TorchFX` dan `AmbientSparkles`
+`Scripts/VFX/TorchFX.cs`, `Scripts/VFX/AmbientSparkles.cs`
+
+- `TorchFX`: intensitas cahaya obor berkedip (Perlin noise), api bergoyang, bara api naik
+- `AmbientSparkles`: kilau partikel di sekitar Key dan Artifact
+
+### Camera shake & hit-stop
+
+- `TopDownCamera` memakai model **trauma**: setiap hit menambah trauma (0..1), guncangan = trauma² × noise, lalu meluruh. Pukulan kecil terasa halus, Slam terasa keras
+- Hit-stop dan slow-motion mengatur `Time.timeScale` dan selalu kembali ke 1 (sudah dicek di tes otomatis)
+
+### `VFXAssets`
+`Editor/VFXAssets.cs`
+
+Membuat tekstur partikel secara prosedural (soft dot, ring, disc telegraph, strip) sebagai PNG,
+lalu material partikel additive / alpha blended / debris.
 
 ---
 

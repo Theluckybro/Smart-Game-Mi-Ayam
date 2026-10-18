@@ -143,8 +143,33 @@ Retreat Point, dan status gerbang besi.
 - [x] Animator per tipe karakter: idle / jalan / lari, serang, kena hit, mati, taunt
 - [x] Environment KayKit: lantai, fasad dinding, pilar, gerbang, jebakan duri, props, banner
 
+**VFX / game juice**
+- [x] Hit-stop, camera shake, slow-motion, knockback, angka damage, ikon alert AI (! / ?)
+- [x] Telegraph serangan (lingkaran Slam, garis Charge, bola energi Mage), busur tebasan
+- [x] Shockwave, debu, puing tulang/batu, aura Enrage, trail proyektil, obor & kilau objective
+
 **Sisa (polish)**
-- [ ] Audio (SFX & ambience), VFX, UI final (main menu, HUD uGUI), video demo
+- [ ] Audio (SFX & ambience), UI final (main menu, HUD uGUI), video demo
+
+## VFX
+
+![VFX](Docs/images/screenshot_vfx.png)
+
+Semua VFX dibuat prosedural lewat kode (tanpa aset tambahan). Tekstur partikel di-generate oleh
+`Editor/VFXAssets.cs`; efek dipanggil lewat `Scripts/VFX/VFXManager.cs`.
+
+| Momen | Feedback |
+|---|---|
+| Player menebas | Busur tebasan, hit-stop 60 ms, camera shake, percikan, angka damage, knockback |
+| Enemy melihat / mendengar | Ikon **!** (Chase), **?** (Investigate), **!!** (Flee) di atas kepala |
+| Melee windup | Lingkaran merah di depan Warrior + busur tebasan merah |
+| Mage / Crossbow | Bola energi mengisi saat membidik, kilatan moncong, trail proyektil, ledakan saat kena |
+| Guardian Slam | Lingkaran peringatan → shockwave ganda, debu, puing batu, shake besar |
+| Guardian Charge | Garis jalur berdenyut → jejak debu, hit-stop saat menabrak |
+| Guardian Enrage | Cincin ungu, ledakan cahaya, aura partikel permanen, label *ENRAGED!* |
+| Kematian | Pecahan tulang memantul di lantai + asap; Guardian: cincin besar + slow-motion |
+| Regen (Flee / Return) | Partikel hijau naik |
+| Level | Obor berkedip + bara, debu sprint / mendarat / jebakan / gerbang, kilau Key & Artifact, ledakan pickup |
 
 ## Aset & kredit
 

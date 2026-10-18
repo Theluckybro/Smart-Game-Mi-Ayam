@@ -26,6 +26,7 @@ namespace DungeonHunter
         private Camera cam;
         private float verticalVelocity;
         private float nextFootstepTime;
+        private Vector3 knockbackVelocity;
 
         public bool IsSprinting { get; private set; }
         public Vector3 Velocity { get; private set; }
@@ -73,7 +74,8 @@ namespace DungeonHunter
                 verticalVelocity = -2f;
             verticalVelocity += gravity * Time.deltaTime;
 
-            controller.Move((Velocity + Vector3.up * verticalVelocity) * Time.deltaTime);
+            knockbackVelocity = Vector3.MoveTowards(knockbackVelocity, Vector3.zero, 25f * Time.deltaTime);
+            controller.Move((Velocity + knockbackVelocity + Vector3.up * verticalVelocity) * Time.deltaTime);
 
             EmitFootsteps(move.sqrMagnitude > 0.01f);
         }
@@ -103,6 +105,17 @@ namespace DungeonHunter
 
             nextFootstepTime = Time.time + footstepInterval;
             NoiseSystem.Emit(transform.position, IsSprinting ? sprintNoiseRadius : walkNoiseRadius);
+
+            // Sprint = berisik → kepulan debu di kaki sebagai petunjuk visual
+            if (IsSprinting)
+                VFXManager.Smoke(transform.position + Vector3.up * 0.1f, new Color(0.55f, 0.5f, 0.45f, 0.5f), 3, 0.5f, 0.8f);
+        }
+
+        /// <summary>Dorongan singkat saat terkena serangan.</summary>
+        public void ApplyKnockback(Vector3 velocity)
+        {
+            velocity.y = 0f;
+            knockbackVelocity = velocity;
         }
     }
 }

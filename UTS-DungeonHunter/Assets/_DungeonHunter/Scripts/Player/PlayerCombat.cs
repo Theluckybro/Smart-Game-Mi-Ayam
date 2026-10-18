@@ -55,6 +55,7 @@ namespace DungeonHunter
             NoiseSystem.Emit(transform.position, attackNoiseRadius);
             if (characterAnimator != null)
                 characterAnimator.Attack();
+            VFXManager.Slash(transform, new Color(0.55f, 0.85f, 1f), range, arcAngle);
 
             if (swordPivot != null)
                 StartCoroutine(SwingRoutine());
@@ -75,6 +76,13 @@ namespace DungeonHunter
 
                 hitBuffer.Add(target);
                 target.TakeDamage(damage, transform.position);
+            }
+
+            // Hit-stop + shake hanya jika tebasan mengenai sesuatu → pukulan terasa "berat"
+            if (hitBuffer.Count > 0)
+            {
+                VFXManager.HitStop(0.06f);
+                VFXManager.Shake(0.18f);
             }
         }
 

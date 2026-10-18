@@ -60,17 +60,38 @@ namespace DungeonHunter
                 case Phase.Idle:
                     phase = Phase.Warn;
                     timer = warnTime;
+                    BurstOverArea(false);
                     break;
                 case Phase.Warn:
                     phase = Phase.Active;
                     timer = activeTime;
                     hitThisCycle.Clear();
+                    BurstOverArea(true);
                     break;
                 default:
                     phase = Phase.Idle;
                     timer = idleTime;
                     break;
             }
+        }
+
+        /// <summary>Debu tipis saat peringatan, percikan logam + debu saat duri menghunjam.</summary>
+        private void BurstOverArea(bool strike)
+        {
+            for (float x = -size.x * 0.5f + 1f; x < size.x * 0.5f; x += 2f)
+                for (float z = -size.z * 0.5f + 1f; z < size.z * 0.5f; z += 2f)
+                {
+                    Vector3 p = transform.TransformPoint(new Vector3(x, 0.1f, z));
+                    if (strike)
+                    {
+                        VFXManager.Sparks(p, Vector3.up, new Color(0.9f, 0.9f, 1f), 4, 6f, 0.5f);
+                        VFXManager.Smoke(p, new Color(0.45f, 0.4f, 0.38f, 0.6f), 2, 0.8f, 1.2f);
+                    }
+                    else
+                    {
+                        VFXManager.Smoke(p, new Color(0.45f, 0.4f, 0.38f, 0.35f), 1, 0.6f, 0.5f);
+                    }
+                }
         }
 
         private void DamageOccupants()

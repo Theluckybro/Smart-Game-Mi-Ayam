@@ -10,6 +10,7 @@ namespace DungeonHunter
     {
         [SerializeField] private float radius = 0.15f;
         [SerializeField] private float lifetime = 3f;
+        [SerializeField] private Color fxColor = new Color(0.75f, 0.4f, 1f);
 
         private float speed;
         private float damage;
@@ -29,6 +30,7 @@ namespace DungeonHunter
         {
             if (Time.time >= dieTime)
             {
+                VFXManager.Glow(transform.position, fxColor, 0.8f, 0.15f);
                 Destroy(gameObject);
                 return;
             }
@@ -56,6 +58,8 @@ namespace DungeonHunter
                 Health h = nearestCol.GetComponentInParent<Health>();
                 if (h != null)
                     h.TakeDamage(damage, owner != null ? owner.position : transform.position);
+                Vector3 hitPoint = transform.position + transform.forward * nearest;
+                VFXManager.Impact(hitPoint, -transform.forward, fxColor, h != null ? 1f : 0.7f);
                 Destroy(gameObject);
                 return;
             }

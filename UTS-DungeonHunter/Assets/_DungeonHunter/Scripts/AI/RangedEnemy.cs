@@ -24,6 +24,7 @@ namespace DungeonHunter
         [SerializeField] private float fireCooldown = 1.6f;
         [SerializeField] private float aimTime = 0.45f;
         [SerializeField] private Color aimColor = new Color(1f, 0.6f, 0.1f);
+        [SerializeField] private Color fxColor = new Color(0.75f, 0.4f, 1f);
 
         private float nextFireTime;
         private float aimTimer;
@@ -145,6 +146,7 @@ namespace DungeonHunter
                 isAiming = true;
                 aimTimer = aimTime;
                 PlayAttackAnimation();
+                VFXManager.ChargeUp(MuzzlePosition, fxColor, 0.7f, aimTime);
                 if (hitFlash != null)
                     hitFlash.Flash(aimColor, aimTime);
             }
@@ -220,14 +222,19 @@ namespace DungeonHunter
             return found;
         }
 
+        private Vector3 MuzzlePosition =>
+            firePoint != null ? firePoint.position : transform.position + Vector3.up * 1.2f;
+
         private void Fire()
         {
             nextFireTime = Time.time + fireCooldown;
             if (projectilePrefab == null || target == null)
                 return;
 
-            Vector3 origin = firePoint != null ? firePoint.position : transform.position + Vector3.up * 1.2f;
+            Vector3 origin = MuzzlePosition;
             Vector3 aimPoint = target.position + Vector3.up * 1.0f;
+            VFXManager.Glow(origin, fxColor, 1.6f, 0.12f);
+            VFXManager.Sparks(origin, aimPoint - origin, fxColor, 8, 5f, 0.4f);
             Projectile p = Instantiate(projectilePrefab, origin, Quaternion.LookRotation(aimPoint - origin));
             p.gameObject.SetActive(true);
             p.Launch(projectileSpeed, projectileDamage, transform);

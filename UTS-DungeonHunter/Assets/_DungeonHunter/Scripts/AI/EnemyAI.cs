@@ -69,6 +69,10 @@ namespace DungeonHunter
         [SerializeField] protected float regenPerSecond = 8f;
         [SerializeField] protected List<Transform> retreatPoints = new List<Transform>();
 
+        [Header("Feedback")]
+        [SerializeField, Range(0f, 1f)] protected float knockbackScale = 1f;
+        [SerializeField] protected float alertHeight = 2.5f;
+
         [Header("Steering - Separation")]
         [SerializeField] protected float separationRadius = 1.6f;
         [SerializeField] protected float separationStrength = 2.5f;
@@ -96,6 +100,8 @@ namespace DungeonHunter
         private float unreachableTimer;
         private NavMeshPath scratchPath;
         private NavMeshQueryFilter queryFilter;
+        private Vector3 knockbackVelocity;
+        private float nextHealFxTime;
 
         // ---- Data untuk AI Debug Mode ----
         public string DisplayName => displayName;
@@ -227,6 +233,7 @@ namespace DungeonHunter
 
             // 5. STEERING — separation agar enemy tidak bertumpuk
             ApplySeparation();
+            ApplyKnockbackMotion();
         }
 
         // =====================================================
@@ -270,10 +277,12 @@ namespace DungeonHunter
             if (State == newState)
                 return;
 
+            EnemyState previous = State;
             ExitState(State);
             State = newState;
             stateTimer = 0f;
             EnterState(newState);
+            ShowAlert(previous, newState);
         }
 
         protected virtual void EnterState(EnemyState state)
@@ -569,6 +578,7 @@ namespace DungeonHunter
                 StopMoving();
                 DestinationLabel = "Di Retreat Point (regen)";
                 health.Heal(regenPerSecond * Time.deltaTime);
+                HealEffect();
                 Reason = $"Memulihkan HP ({health.Normalized:P0})";
                 if (target != null)
                     FaceTowards(target.position);
@@ -673,6 +683,49 @@ namespace DungeonHunter
                 Quaternion.LookRotation(dir), turnSpeed * Time.deltaTime);
         }
 
+        // =====================================================
+        // FEEDBACK (VFX)
+        // =====================================================
+
+        /// <summary>
+        /// Ikon di atas kepala saat AI berubah dari tenang ke waspada:
+        ///   "!" = melihat player (Chase)   "?" = curiga / mendengar sesuatu (Investigate)
+        /// </summary>
+        private void ShowAlert(EnemyState from, EnemyState to)
+        {
+            bool calm = from == EnemyState.Patrol || from == EnemyState.Guard || from == EnemyState.Search
+                        || from == EnemyState.Return;
+            if (to == EnemyState.Chase && (calm || from == EnemyState.Investigate))
+                VFXManager.Alert(transform, "!", new Color(1f, 0.85f, 0.2f), alertHeight);
+            else if (to == EnemyState.Investigate && calm)
+                VFXManager.Alert(transform, "?", new Color(0.6f, 0.9f, 1f), alertHeight);
+            else if (to == EnemyState.Flee)
+                VFXManager.Alert(transform, "!!", new Color(0.4f, 1f, 0.5f), alertHeight);
+        }
+
+        protected void HealEffect()
+        {
+            if (Time.time < nextHealFxTime)
+                return;
+            nextHealFxTime = Time.time + 0.3f;
+            VFXManager.Heal(transform.position, 2);
+        }
+
+        /// <summary>Dorongan singkat saat terkena serangan (dikurangi oleh knockbackScale).</summary>
+        public void ApplyKnockback(Vector3 velocity)
+        {
+            velocity.y = 0f;
+            knockbackVelocity = velocity * knockbackScale;
+        }
+
+        private void ApplyKnockbackMotion()
+        {
+            if (knockbackVelocity.sqrMagnitude < 0.0001f || !agent.isOnNavMesh || agent.isOnOffMeshLink)
+                return;
+            agent.Move(knockbackVelocity * Time.deltaTime);
+            knockbackVelocity = Vector3.MoveTowards(knockbackVelocity, Vector3.zero, 25f * Time.deltaTime);
+        }
+
         protected void PlayAttackAnimation()
         {
             if (characterAnimator != null)
@@ -773,6 +826,8 @@ namespace DungeonHunter
             if (agent.isOnOffMeshLink)
                 agent.CompleteOffMeshLink();
             LinksTraversed++;
+            VFXManager.Smoke(transform.position + Vector3.up * 0.1f, new Color(0.5f, 0.46f, 0.42f, 0.7f), 8, 0.8f, 2f);
+            VFXManager.Shake(0.08f);
             IsTraversingLink = false;
         }
 
