@@ -12,6 +12,7 @@ namespace DungeonHunter
         private float baseIntensity;
         private Vector3 baseFlameScale;
         private float seed;
+        private AudioSource crackle;
 
         private void Start()
         {
@@ -23,6 +24,28 @@ namespace DungeonHunter
 
             if (VFXManager.Instance != null && flame != null)
                 CreateEmbers();
+            CreateCrackleAudio();
+        }
+
+        /// <summary>Suara api berderak (loop prosedural), 3D dengan jangkauan pendek.</summary>
+        private void CreateCrackleAudio()
+        {
+            AudioClip clip = SoundLibrary.Load("Ambient/torch_loop");
+            if (clip == null)
+                return;
+            var src = crackle = gameObject.AddComponent<AudioSource>();
+            src.clip = clip;
+            src.loop = true;
+            src.spatialBlend = 1f;
+            src.rolloffMode = AudioRolloffMode.Linear;
+            src.minDistance = 1f;
+            src.maxDistance = 9f;
+            src.volume = 0.5f * AudioManager.SfxVolume;
+            src.pitch = Random.Range(0.85f, 1.15f);
+            src.dopplerLevel = 0f;
+            src.priority = 200;
+            src.time = Random.Range(0f, clip.length * 0.9f);
+            src.Play();
         }
 
         private void CreateEmbers()
@@ -63,6 +86,8 @@ namespace DungeonHunter
             float n = Mathf.PerlinNoise(seed, Time.time * 6f);
             float n2 = Mathf.PerlinNoise(seed + 10f, Time.time * 13f);
             float flicker = 0.75f + 0.35f * n + 0.15f * n2;
+            if (crackle != null)
+                crackle.volume = 0.5f * AudioManager.SfxVolume;
 
             if (torchLight != null)
                 torchLight.intensity = baseIntensity * flicker;

@@ -11,6 +11,7 @@ namespace DungeonHunter
         [SerializeField] private float radius = 0.15f;
         [SerializeField] private float lifetime = 3f;
         [SerializeField] private Color fxColor = new Color(0.75f, 0.4f, 1f);
+        [SerializeField] private bool magic = true;
 
         private float speed;
         private float damage;
@@ -60,6 +61,7 @@ namespace DungeonHunter
                     h.TakeDamage(damage, owner != null ? owner.position : transform.position);
                 Vector3 hitPoint = transform.position + transform.forward * nearest;
                 VFXManager.Impact(hitPoint, -transform.forward, fxColor, h != null ? 1f : 0.7f);
+                AudioManager.Play(magic ? Sfx.MageImpact : Sfx.BoltImpact, hitPoint, h != null ? 1f : 0.7f);
                 Destroy(gameObject);
                 return;
             }

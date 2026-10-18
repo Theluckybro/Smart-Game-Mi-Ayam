@@ -55,6 +55,8 @@ namespace DungeonHunter
             VFXManager.DamageNumber(body + Vector3.up * (isBoss ? 2f : 1f), amount,
                 isPlayer ? new Color(1f, 0.3f, 0.25f) : new Color(1f, 0.95f, 0.6f), amount >= 20f);
 
+            PlayHitSound(body, amount);
+
             if (isPlayer)
             {
                 VFXManager.Shake(0.45f);
@@ -76,6 +78,8 @@ namespace DungeonHunter
             VFXManager.Debris(body, debrisColor, isBoss ? 30 : 16, isBoss ? 8f : 5f, isBoss ? 0.22f : 0.14f);
             VFXManager.Smoke(transform.position + Vector3.up * 0.4f, new Color(0.3f, 0.28f, 0.34f, 0.8f), isBoss ? 18 : 10, isBoss ? 1.8f : 1.1f, 2.5f);
 
+            PlayDeathSound(body);
+
             if (isBoss)
             {
                 VFXManager.Ring(transform.position, new Color(0.8f, 0.4f, 1f), 9f, 0.8f);
@@ -91,6 +95,50 @@ namespace DungeonHunter
             else
             {
                 VFXManager.Shake(0.3f);
+            }
+        }
+
+        /// <summary>Suara kena hit: player = pukulan + armor, Guardian = pelat logam, skeleton = tulang beradu.</summary>
+        private void PlayHitSound(Vector3 body, float amount)
+        {
+            float vol = Mathf.Clamp(amount / 25f, 0.6f, 1.2f);
+            if (isPlayer)
+            {
+                AudioManager.Play(Sfx.PlayerHurt, body, vol);
+                AudioManager.Play(Sfx.PlayerHurtArmor, body, vol);
+            }
+            else if (isBoss)
+            {
+                AudioManager.Play(Sfx.SwordHitArmor, body, vol);
+                AudioManager.Play(Sfx.SwordHitBody, body, vol, 0.8f);
+            }
+            else
+            {
+                AudioManager.Play(Sfx.SwordHitBone, body, vol);
+                AudioManager.Play(Sfx.SwordHitBody, body, vol * 0.8f);
+            }
+        }
+
+        /// <summary>Suara mati: skeleton runtuh (tulang berjatuhan), Guardian dentuman + gong, player jatuh.</summary>
+        private void PlayDeathSound(Vector3 body)
+        {
+            if (isPlayer)
+            {
+                AudioManager.Play(Sfx.BodyFall, transform.position);
+                AudioManager.Play(Sfx.PlayerHurtArmor, body, 1f, 0.8f);
+            }
+            else if (isBoss)
+            {
+                AudioManager.Play(Sfx.EnrageBoom, body);
+                AudioManager.Play(Sfx.Gong, body, 1f, 0.9f, 0.15f);
+                AudioManager.PlayBurst(Sfx.SwordHitBone, transform.position, 8, 0.07f, 1f);
+                AudioManager.Play(Sfx.SwordHitArmor, body, 1f, 0.7f, 0.35f);
+            }
+            else
+            {
+                AudioManager.Play(Sfx.BoneBreak, body);
+                AudioManager.PlayBurst(Sfx.SwordHitBone, transform.position, 4, 0.08f, 0.9f);
+                AudioManager.Play(Sfx.BodyFall, transform.position, 0.5f, 1.3f, 0.2f);
             }
         }
     }

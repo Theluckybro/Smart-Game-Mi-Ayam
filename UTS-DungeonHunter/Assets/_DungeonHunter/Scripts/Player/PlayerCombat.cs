@@ -56,6 +56,8 @@ namespace DungeonHunter
             if (characterAnimator != null)
                 characterAnimator.Attack();
             VFXManager.Slash(transform, new Color(0.55f, 0.85f, 1f), range, arcAngle);
+            AudioManager.Play(Sfx.SwordSwing, transform.position);
+            AudioManager.Play(Sfx.SwordWhoosh, transform.position);
 
             if (swordPivot != null)
                 StartCoroutine(SwingRoutine());

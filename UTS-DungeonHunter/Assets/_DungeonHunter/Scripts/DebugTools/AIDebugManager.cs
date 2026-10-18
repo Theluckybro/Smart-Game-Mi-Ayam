@@ -76,7 +76,8 @@ namespace DungeonHunter
             if (cam == null)
                 cam = Camera.main;
 
-            GUI.Box(new Rect(10, Screen.height - 178, 360, 168),
+            string music = MusicDirector.Instance != null ? MusicDirector.Instance.DebugLabel : "-";
+            GUI.Box(new Rect(10, Screen.height - 196, 360, 186),
                 "<b>AI DEBUG MODE</b> (F1)\n" +
                 "<color=#ffe633>■</color> FOV   <color=#ff3333>■</color> FOV melihat player\n" +
                 "<color=#33e6ff>■</color> NavMesh Path   <color=#ff33ff>■</color> Last Known Position\n" +
@@ -84,7 +85,8 @@ namespace DungeonHunter
                 "<color=#b34dff>■</color> Leash Guardian   <color=#ff9900>■</color> Arah Charge\n" +
                 "<color=#33ff66>■</color> Retreat Point / jalur Flee\n" +
                 "<color=#ff2a2a>■</color> Area Trap (cost tinggi)   <color=#ffffff>■</color> NavMeshLink\n" +
-                "<color=#aaaaaa>■</color> Gerbang besi (dynamic obstacle)", panelStyle);
+                "<color=#aaaaaa>■</color> Gerbang besi (dynamic obstacle)\n" +
+                $"<b>Musik adaptif</b> : <color=#ffd24d>{music}</color>", panelStyle);
 
             foreach (EnemyAI e in EnemyAI.All)
             {

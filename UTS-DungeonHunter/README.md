@@ -42,7 +42,7 @@ mengalahkan **Crypt Guardian**, lalu mengambil **Ancient Artifact**.
 | Klik kiri / Space | Serang (pedang) |
 | Shift | Sprint (lebih berisik → terdengar enemy) |
 | **F1** | **AI Debug Mode** |
-| Esc | Pause / lanjutkan |
+| Esc | Pause / lanjutkan (volume Musik & Efek diatur di menu Pause) |
 | R | Main lagi (setelah menang / kalah) |
 
 ## Gameplay loop
@@ -154,8 +154,13 @@ Retreat Point, dan status gerbang besi.
 - [x] HUD uGUI: bar HP dengan efek *chip*, slot Key, checklist objective, toast pesan, bar HP boss + fase
 - [x] Vignette merah saat kena damage & berdenyut saat HP kritis, bar HP di atas enemy
 
+**Audio**
+- [x] ±50 efek suara (Kenney CC0) dengan variasi klip + pitch acak, suara 3D yang didengar dari posisi player
+- [x] **Musik adaptif** yang membaca state AI: Explore → Tension → Combat → Boss → Boss Phase 2
+- [x] Ambience obor & tetesan air, musik teredam saat Pause / slow-motion, slider volume
+
 **Sisa (polish)**
-- [ ] Audio (SFX & ambience), video demo
+- [ ] Video demo
 
 ## VFX
 
@@ -176,6 +181,35 @@ Semua VFX dibuat prosedural lewat kode (tanpa aset tambahan). Tekstur partikel d
 | Kematian | Pecahan tulang memantul di lantai + asap; Guardian: cincin besar + slow-motion |
 | Regen (Flee / Return) | Partikel hijau naik |
 | Level | Obor berkedip + bara, debu sprint / mendarat / jebakan / gerbang, kilau Key & Artifact, ledakan pickup |
+
+## Audio
+
+| Momen | Suara |
+|---|---|
+| Player menebas / kena | Tebasan + whoosh; tulang beradu (skeleton), pelat logam (Guardian), pukulan + armor (player) |
+| Langkah kaki | Berbasis jarak tempuh — sprint lebih rapat & keras, skeleton lebih ringan, Guardian berdebum |
+| AI berubah state | **!** dentang lonceng (Chase), **?** lonceng lembut (Investigate), **!!** tulang bergemeretak (Flee) |
+| Melee / Ranged | Derit tulang saat windup, ayunan; tali crossbow ditarik → lepas; sihir Mage mengisi → tembak → ledakan |
+| Guardian | Dengung sebelum Slam → dentuman rendah + bebatuan; derit + gemuruh saat Charge; Enrage = ledakan + gong |
+| Kematian | Skeleton runtuh (tulang berjatuhan beruntun), Guardian dentuman + gong + slow-motion (pitch turun) |
+| Level | Obor berderak (3D), tetesan air acak, pintu dibuka, rantai + gerbang besi menghantam, jebakan duri klik → hunjam |
+| Objective | Gemerincing Key + jingle, segel Artifact pecah, jingle Victory / Defeat |
+| UI | Hover & klik tombol, buku dibuka/ditutup saat Pause, halaman dibalik saat pesan objective muncul |
+
+### Musik adaptif (membaca AI)
+
+Musik dibuat prosedural (`Tools/AudioGen/generate_music.py`) sebagai 4 *stem* dengan tempo & akor yang sama
+(D minor, 96 BPM), diputar serentak lalu di-crossfade oleh `Scripts/Audio/MusicDirector.cs` sesuai kondisi AI:
+
+| Kondisi AI | Mode | Stem yang terdengar |
+|---|---|---|
+| Tidak ada musuh waspada | EXPLORE | drone + pad + lonceng |
+| Ada musuh **Investigate / Search / Flee** | TENSION | explore + combat pelan |
+| Ada musuh **Chase / Attack / Reposition** (+ tahan 4 detik) | COMBAT | taiko + bass ostinato + tremolo |
+| Guardian bertarung | BOSS | drum berat + bass distorsi + brass + choir |
+| Guardian **Enrage** | BOSS PHASE 2 | + hi-hat cepat, roll, disonansi |
+
+Mode musik yang aktif ikut ditampilkan di panel **AI Debug Mode (F1)**.
 
 ## UI
 
@@ -211,8 +245,14 @@ Semua aset 3D dan animasi berasal dari **KayKit** oleh Kay Lousberg, lisensi **C
 | [KayKit Character Animations](https://kaylousberg.itch.io/kaykit-character-animations) | Animasi Rig_Medium |
 | [KayKit Dungeon Remastered](https://kaylousberg.itch.io/kaykit-dungeon-remastered) | Lantai, dinding, pilar, gerbang, jebakan duri, kunci, props, banner |
 
-File zip asli disimpan di `AssetSources/` (tidak di-commit, ±130 MB). Hanya file yang dipakai
-yang disalin ke `Assets/_DungeonHunter/ThirdParty/KayKit/`. Pengaturan import otomatis ada di
+Efek suara berasal dari paket audio **Kenney** (kenney.nl), lisensi **CC0**:
+[RPG Audio](https://kenney.nl/assets/rpg-audio), [Impact Sounds](https://kenney.nl/assets/impact-sounds),
+[Interface Sounds](https://kenney.nl/assets/interface-sounds), [Music Jingles](https://kenney.nl/assets/music-jingles),
+[Sci-fi Sounds](https://kenney.nl/assets/sci-fi-sounds). Lisensi ada di `Assets/_DungeonHunter/ThirdParty/Kenney/Licenses/`.
+Musik latar, stinger, suara obor, dan tetesan air dibuat sendiri secara prosedural.
+
+File zip asli disimpan di `AssetSources/` (tidak di-commit). Hanya file yang dipakai
+yang disalin ke `Assets/_DungeonHunter/ThirdParty/KayKit/` dan `ThirdParty/Kenney/`. Pengaturan import otomatis ada di
 `Editor/KayKitImportSettings.cs`; pemasangan model, material, dan Animator di `Editor/KayKitVisuals.cs`.
 
 ## Pembagian kerja (usulan)

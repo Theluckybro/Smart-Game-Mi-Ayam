@@ -71,6 +71,8 @@ namespace DungeonHunter
                     bool inFront = Vector3.Angle(transform.forward, dir) <= 60f;
 
                     VFXManager.Slash(transform, new Color(1f, 0.35f, 0.2f), attackRange + 0.3f, 110f, 1f);
+                    AudioManager.Play(Sfx.MeleeSwing, transform.position);
+                    AudioManager.Play(Sfx.SwordWhoosh, transform.position, 0.8f, 0.75f);
                     if (inRange && inFront && targetHealth != null)
                         targetHealth.TakeDamage(attackDamage, transform.position);
                 }
@@ -92,6 +94,7 @@ namespace DungeonHunter
                 VFXManager.Telegraph(transform.position + transform.forward * (attackRange * 0.55f), attackRange * 0.6f,
                     attackWindup, new Color(1f, 0.25f, 0.15f));
                 hitFlash?.Flash(windupColor, attackWindup);
+                AudioManager.Play(Sfx.MeleeWindup, transform.position);
             }
         }
 

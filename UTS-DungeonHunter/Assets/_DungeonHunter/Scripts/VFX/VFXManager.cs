@@ -476,6 +476,10 @@ namespace DungeonHunter
 
         public static void Shake(float amount) => TopDownCamera.Shake(amount);
 
+        /// <summary>Skala waktu slow-motion yang sedang aktif (1 = normal). Dipakai audio untuk menurunkan pitch.</summary>
+        public static float SlowMotionScale =>
+            Instance != null && Time.unscaledTime < Instance.slowMoUntil ? Instance.slowMoScale : 1f;
+
         private void Update()
         {
             float target = 1f;

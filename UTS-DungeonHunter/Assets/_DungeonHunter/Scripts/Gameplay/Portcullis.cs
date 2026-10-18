@@ -61,6 +61,8 @@ namespace DungeonHunter
                 VFXManager.Sparks(p, Vector3.up, new Color(1f, 0.75f, 0.4f), 5, 5f, 0.8f);
             }
             VFXManager.Shake(0.4f);
+            AudioManager.Play(Sfx.Chains, transform.position);
+            AudioManager.Play(Sfx.Chains, transform.position, 0.7f, 0.85f, 0.25f);
             if (GameManager.Instance != null)
                 GameManager.Instance.ShowMessage("Gerbang besi tertutup! Keluar lewat koridor selatan.");
         }
@@ -75,6 +77,8 @@ namespace DungeonHunter
             {
                 closing = false;
                 IsClosed = true;
+                AudioManager.Play(Sfx.GateSlam, transform.position);
+                AudioManager.Play(Sfx.SlamRocks, transform.position, 0.6f, 1.2f);
             }
         }
     }

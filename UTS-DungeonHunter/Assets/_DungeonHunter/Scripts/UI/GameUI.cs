@@ -60,6 +60,7 @@ namespace DungeonHunter.UI
         private RectTransform endTitleRt;
         private Text endTitle, endSubtitle, endStats;
         private float endShowAt = -1f;
+        private bool endHitPlayed;
 
         // =====================================================
         // SETUP
@@ -293,17 +294,36 @@ namespace DungeonHunter.UI
             pauseGroup = Group("Pause", root);
             Transform p = pauseGroup.transform;
             UIKit.AddImage(UIKit.Stretch("Backdrop", p), null, new Color(0f, 0f, 0f, 0.6f));
-            RectTransform panel = UIKit.NewRect("Panel", p, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(560f, 540f));
+            RectTransform panel = UIKit.NewRect("Panel", p, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(560f, 700f));
             UIKit.AddImage(panel, UIKit.PanelSprite, Color.white, true);
             UIKit.Label("Title", panel, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -30f), new Vector2(500f, 70f),
                 "PAUSED", 60, UIKit.Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
 
-            UIKit.MakeButton("Resume", panel, new Vector2(0.5f, 0.5f), new Vector2(0f, 80f), new Vector2(380f, 64f), "LANJUTKAN", () => gm?.Resume());
-            UIKit.MakeButton("Restart", panel, new Vector2(0.5f, 0.5f), new Vector2(0f, 0f), new Vector2(380f, 64f), "ULANGI", () => gm?.Restart(true));
-            Button debug = UIKit.MakeButton("Debug", panel, new Vector2(0.5f, 0.5f), new Vector2(0f, -80f), new Vector2(380f, 64f), "AI DEBUG: OFF",
+            UIKit.MakeButton("Resume", panel, new Vector2(0.5f, 0.5f), new Vector2(0f, 160f), new Vector2(380f, 64f), "LANJUTKAN", () => gm?.Resume());
+            UIKit.MakeButton("Restart", panel, new Vector2(0.5f, 0.5f), new Vector2(0f, 82f), new Vector2(380f, 64f), "ULANGI", () => gm?.Restart(true));
+            Button debug = UIKit.MakeButton("Debug", panel, new Vector2(0.5f, 0.5f), new Vector2(0f, 4f), new Vector2(380f, 64f), "AI DEBUG: OFF",
                 () => AIDebugManager.SetEnabled(!AIDebugManager.DebugEnabled));
             debugButtonText = debug.GetComponentInChildren<Text>();
-            UIKit.MakeButton("Menu", panel, new Vector2(0.5f, 0.5f), new Vector2(0f, -160f), new Vector2(380f, 64f), "MENU UTAMA", () => gm?.Restart(false));
+            UIKit.MakeButton("Menu", panel, new Vector2(0.5f, 0.5f), new Vector2(0f, -74f), new Vector2(380f, 64f), "MENU UTAMA", () => gm?.Restart(false));
+
+            // ---- Volume ----
+            UIKit.AddImage(UIKit.NewRect("Divider", panel, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -140f), new Vector2(440f, 2f)),
+                UIKit.FadeSprite, UIKit.GoldDim);
+            UIKit.MakeSlider("MusicVolume", panel, new Vector2(0.5f, 0.5f), new Vector2(0f, -190f), "MUSIK",
+                AudioManager.MusicVolume, v => { AudioManager.SetMusicVolume(v); VolumeTick(v); });
+            UIKit.MakeSlider("SfxVolume", panel, new Vector2(0.5f, 0.5f), new Vector2(0f, -250f), "EFEK SUARA",
+                AudioManager.SfxVolume, v => { AudioManager.SetSfxVolume(v); VolumeTick(v); });
+        }
+
+        private float lastTickValue = -1f;
+
+        /// <summary>Bunyi "tik" setiap slider bergeser 10% sebagai umpan balik volume.</summary>
+        private void VolumeTick(float value)
+        {
+            if (Mathf.Abs(value - lastTickValue) < 0.1f)
+                return;
+            lastTickValue = value;
+            AudioManager.Play2D(Sfx.UIHover, 1.5f, 0.8f + value * 0.5f);
         }
 
         private void BuildEnd()
@@ -346,6 +366,7 @@ namespace DungeonHunter.UI
             {
                 bool won = state == GameState.Won;
                 endShowAt = Time.unscaledTime + EndScreenDelay;
+                endHitPlayed = false;
                 endTitle.text = won ? "VICTORY" : "DEFEAT";
                 endTitle.color = won ? UIKit.Victory : UIKit.Defeat;
                 endSubtitle.text = won ? "Ancient Artifact berhasil diamankan!" : "Kamu tewas di dalam dungeon...";
@@ -443,6 +464,8 @@ namespace DungeonHunter.UI
                 lastSeenMessageTime = gm.LastMessageTime;
                 toastShownAt = Time.unscaledTime;
                 toastText.text = gm.LastMessage;
+                if (!gm.IsGameOver)
+                    AudioManager.Play2D(Sfx.UIToast);
             }
             float age = Time.unscaledTime - toastShownAt;
             bool visible = age < ToastDuration && !gm.IsGameOver;
@@ -543,6 +566,11 @@ namespace DungeonHunter.UI
 
             groupTargets[endGroup] = 1f;
             groupTargets[hudGroup] = 0f;
+            if (!endHitPlayed)
+            {
+                endHitPlayed = true;
+                AudioManager.Play2D(Sfx.UIEndHit);
+            }
             float t = (Time.unscaledTime - endShowAt) / 0.4f;
             float pop = t >= 1f ? 1f : 1f + 0.8f * (1f - t) * (1f - t) - 0.08f * Mathf.Sin(t * Mathf.PI);
             float idle = t >= 1f ? 0.02f * Mathf.Sin(Time.unscaledTime * 2f) : 0f;

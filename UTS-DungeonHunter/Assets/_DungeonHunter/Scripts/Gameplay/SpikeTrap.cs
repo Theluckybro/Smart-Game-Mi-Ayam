@@ -78,6 +78,7 @@ namespace DungeonHunter
         /// <summary>Debu tipis saat peringatan, percikan logam + debu saat duri menghunjam.</summary>
         private void BurstOverArea(bool strike)
         {
+            AudioManager.Play(strike ? Sfx.SpikeStrike : Sfx.SpikeWarn, transform.position);
             for (float x = -size.x * 0.5f + 1f; x < size.x * 0.5f; x += 2f)
                 for (float z = -size.z * 0.5f + 1f; z < size.z * 0.5f; z += 2f)
                 {

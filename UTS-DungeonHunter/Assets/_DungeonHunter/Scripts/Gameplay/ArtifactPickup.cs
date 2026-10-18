@@ -24,6 +24,8 @@ namespace DungeonHunter
                 Color purple = new Color(0.75f, 0.35f, 1f);
                 VFXManager.Ring(transform.position, purple, 3.5f, 0.6f);
                 VFXManager.Sparks(transform.position + Vector3.up, Vector3.up, purple, 24, 6f, 1.2f);
+                AudioManager.Play(Sfx.SealBreak, transform.position);
+                AudioManager.Play(Sfx.MageCharge, transform.position, 2f, 0.7f, 0.1f);
             }
             base.Update();
         }
@@ -46,6 +48,8 @@ namespace DungeonHunter
             VFXManager.Ring(transform.position, Color.white, 6f, 0.8f);
             VFXManager.Shake(0.35f);
             VFXManager.SlowMotion(0.35f, 0.8f);
+            AudioManager.Play(Sfx.ArtifactPickup, transform.position);
+            AudioManager.Play(Sfx.MageCharge, transform.position, 2.5f, 1.6f);
             gameObject.SetActive(false);
         }
     }

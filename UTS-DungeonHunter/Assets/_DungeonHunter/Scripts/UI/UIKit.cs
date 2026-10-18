@@ -207,6 +207,47 @@ namespace DungeonHunter.UI
             return (fill, chip);
         }
 
+        /// <summary>Slider bertema: label di kiri, bar emas + knob di tengah, persentase di kanan.</summary>
+        public static Slider MakeSlider(string name, Transform parent, Vector2 anchor, Vector2 pos, string label, float value,
+            UnityEngine.Events.UnityAction<float> onChange)
+        {
+            RectTransform row = NewRect(name, parent, anchor, new Vector2(0.5f, 0.5f), pos, new Vector2(460f, 44f));
+            Label("Label", row, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), Vector2.zero, new Vector2(150f, 40f), label, 22, TextLight);
+            Text percent = Label("Value", row, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), Vector2.zero, new Vector2(64f, 40f),
+                "", 22, Gold, TextAnchor.MiddleRight, FontStyle.Bold);
+
+            RectTransform track = NewRect("Track", row, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(160f, 0f), new Vector2(220f, 14f));
+            Image bg = AddImage(track, BarSprite, new Color(0f, 0f, 0f, 0.65f), true);
+            bg.raycastTarget = true;
+
+            RectTransform fillArea = Stretch("FillArea", track, 2f);
+            RectTransform fill = Stretch("Fill", fillArea);
+            AddImage(fill, BarSprite, Gold, true);
+
+            RectTransform handleArea = Stretch("HandleArea", track);
+            handleArea.offsetMin = new Vector2(10f, 0f);
+            handleArea.offsetMax = new Vector2(-10f, 0f);
+            RectTransform handle = NewRect("Handle", handleArea, new Vector2(0f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(28f, 28f));
+            Image knob = AddImage(handle, DotSprite, Color.white);
+            knob.raycastTarget = true;
+
+            var slider = track.gameObject.AddComponent<Slider>();
+            slider.fillRect = fill;
+            slider.handleRect = handle;
+            slider.targetGraphic = knob;
+            slider.direction = Slider.Direction.LeftToRight;
+            var colors = slider.colors;
+            colors.normalColor = new Color(1f, 0.9f, 0.7f);
+            colors.highlightedColor = Color.white;
+            colors.pressedColor = Gold;
+            slider.colors = colors;
+            slider.SetValueWithoutNotify(value);
+            percent.text = Mathf.RoundToInt(value * 100f) + "%";
+            slider.onValueChanged.AddListener(v => percent.text = Mathf.RoundToInt(v * 100f) + "%");
+            slider.onValueChanged.AddListener(onChange);
+            return slider;
+        }
+
         public static void SetBar(RectTransform bar, float value)
         {
             bar.anchorMax = new Vector2(Mathf.Clamp01(value), 1f);

@@ -179,6 +179,8 @@ namespace DungeonHunter.EditorTools
             SetField(gm, "playerHealth", player.GetComponent<Health>());
             managers.AddComponent<DungeonHunter.UI.GameUI>();
             managers.AddComponent<AIDebugManager>();
+            managers.AddComponent<AudioManager>();
+            managers.AddComponent<MusicDirector>();
             var vfx = managers.AddComponent<VFXManager>();
             SetField(vfx, "additive", VFXAssets.Additive);
             SetField(vfx, "alphaBlend", VFXAssets.AlphaBlend);
@@ -703,6 +705,7 @@ namespace DungeonHunter.EditorTools
             AddDamageFeedback(player, true, false, new Color(1f, 0.45f, 0.3f), new Color(0.6f, 0.6f, 0.68f), 7f, 1.2f);
             player.AddComponent<PlayerController>();
             player.AddComponent<PlayerCombat>();
+            AddFootsteps(player, Sfx.PlayerStep, 1.9f, 1f, 5f);
             return player;
         }
 
@@ -713,7 +716,7 @@ namespace DungeonHunter.EditorTools
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0.03f, 0.02f, 0.05f);
             cam.fieldOfView = 50f;
-            camGo.AddComponent<AudioListener>();
+            // AudioListener tidak di kamera: AudioManager membuat listener yang mengikuti player
 
             var follow = camGo.AddComponent<TopDownCamera>();
             follow.SetTarget(player);
@@ -764,6 +767,7 @@ namespace DungeonHunter.EditorTools
             e.GetComponent<AIPerception>().Configure(9f, 110f);
             AddDamageFeedback(e.gameObject, false, false, BoneSpark, BoneDebris, 6f, 1.1f);
             SetField(e, "alertHeight", 2.6f);
+            AddFootsteps(e.gameObject, Sfx.SkeletonStep, 1.3f, 1f, 3.5f);
             return e;
         }
 
@@ -785,8 +789,10 @@ namespace DungeonHunter.EditorTools
             e.GetComponent<AIPerception>().Configure(12f, 100f);
             SetField(e, "trapAreaCost", 8f);
             SetField(e, "fxColor", crossbow ? ArrowColor : MagicColor);
+            SetField(e, "magic", !crossbow);
             AddDamageFeedback(e.gameObject, false, false, BoneSpark, BoneDebris, 6f, 1.1f);
             SetField(e, "alertHeight", 2.6f);
+            AddFootsteps(e.gameObject, Sfx.SkeletonStep, 1.3f, 1f, 3.5f);
 
             var muzzle = new GameObject("FirePoint").transform;
             muzzle.SetParent(e.transform, false);
@@ -811,6 +817,7 @@ namespace DungeonHunter.EditorTools
             SetField(g, "knockbackScale", 0.08f);
             SetField(g, "alertHeight", 4f);
             AddDamageFeedback(g.gameObject, false, true, new Color(0.85f, 0.6f, 1f), new Color(0.6f, 0.45f, 0.75f), 6f, 1.8f);
+            AddFootsteps(g.gameObject, Sfx.GuardianStep, 2.2f, 1f, 3f);
             return g;
         }
 
@@ -823,6 +830,7 @@ namespace DungeonHunter.EditorTools
             go.GetComponent<Renderer>().sharedMaterial = Materials["Projectile"];
             var projectile = go.AddComponent<Projectile>();
             SetField(projectile, "fxColor", MagicColor);
+            SetField(projectile, "magic", true);
             AddProjectileLight(go, MagicColor);
             AddTrail(go, MagicColor, 0.35f, 0.3f);
             return SavePrefab(go, "Projectile_Magic");
@@ -850,6 +858,7 @@ namespace DungeonHunter.EditorTools
 
             var projectile = go.AddComponent<Projectile>();
             SetField(projectile, "fxColor", ArrowColor);
+            SetField(projectile, "magic", false);
             AddProjectileLight(go, ArrowColor);
             AddTrail(go, ArrowColor, 0.15f, 0.22f);
             return SavePrefab(go, "Projectile_Arrow");
@@ -1082,6 +1091,15 @@ namespace DungeonHunter.EditorTools
             }
             EditorUtility.SetDirty(mat);
             Materials[key] = mat;
+        }
+
+        private static void AddFootsteps(GameObject go, Sfx sfx, float stride, float volume, float referenceSpeed)
+        {
+            var steps = go.AddComponent<FootstepAudio>();
+            SetField(steps, "sfx", (int)sfx);
+            SetField(steps, "strideLength", stride);
+            SetField(steps, "volume", volume);
+            SetField(steps, "referenceSpeed", referenceSpeed);
         }
 
         private static void SetField(Object target, string fieldName, object value)

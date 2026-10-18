@@ -4,7 +4,7 @@ using UnityEngine.UI;
 
 namespace DungeonHunter.UI
 {
-    /// <summary>Efek tombol: membesar & teks memutih saat hover, "punch" kecil saat diklik. Memakai unscaled time (jalan saat pause).</summary>
+    /// <summary>Efek tombol: membesar & teks memutih saat hover, "punch" kecil saat diklik. Ada suara hover & klik. Memakai unscaled time (jalan saat pause).</summary>
     public class UIButtonFX : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler, IPointerDownHandler
     {
         private Text label;
@@ -18,9 +18,19 @@ namespace DungeonHunter.UI
             baseColor = text.color;
         }
 
-        public void OnPointerEnter(PointerEventData eventData) => hover = true;
+        public void OnPointerEnter(PointerEventData eventData)
+        {
+            hover = true;
+            AudioManager.Play2D(Sfx.UIHover);
+        }
+
         public void OnPointerExit(PointerEventData eventData) => hover = false;
-        public void OnPointerDown(PointerEventData eventData) => punch = 1f;
+
+        public void OnPointerDown(PointerEventData eventData)
+        {
+            punch = 1f;
+            AudioManager.Play2D(Sfx.UIClick);
+        }
 
         private void OnDisable()
         {

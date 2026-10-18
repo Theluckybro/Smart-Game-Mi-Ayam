@@ -695,12 +695,23 @@ namespace DungeonHunter
         {
             bool calm = from == EnemyState.Patrol || from == EnemyState.Guard || from == EnemyState.Search
                         || from == EnemyState.Return;
+            Vector3 head = transform.position + Vector3.up * alertHeight;
             if (to == EnemyState.Chase && (calm || from == EnemyState.Investigate))
+            {
                 VFXManager.Alert(transform, "!", new Color(1f, 0.85f, 0.2f), alertHeight);
+                AudioManager.Play(Sfx.AlertSpotted, head);
+            }
             else if (to == EnemyState.Investigate && calm)
+            {
                 VFXManager.Alert(transform, "?", new Color(0.6f, 0.9f, 1f), alertHeight);
+                AudioManager.Play(Sfx.AlertSuspicious, head);
+            }
             else if (to == EnemyState.Flee)
+            {
                 VFXManager.Alert(transform, "!!", new Color(0.4f, 1f, 0.5f), alertHeight);
+                AudioManager.Play(Sfx.AlertFlee, head);
+                AudioManager.Play(Sfx.SwordWhoosh, head, 0.6f, 0.7f);
+            }
         }
 
         protected void HealEffect()
@@ -828,6 +839,7 @@ namespace DungeonHunter
             LinksTraversed++;
             VFXManager.Smoke(transform.position + Vector3.up * 0.1f, new Color(0.5f, 0.46f, 0.42f, 0.7f), 8, 0.8f, 2f);
             VFXManager.Shake(0.08f);
+            AudioManager.Play(Sfx.LinkLand, transform.position);
             IsTraversingLink = false;
         }
 

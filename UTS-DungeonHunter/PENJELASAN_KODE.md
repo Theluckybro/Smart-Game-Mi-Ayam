@@ -13,8 +13,9 @@ Semua script berada di `Assets/_DungeonHunter/`.
 6. [DebugTools — AI Debug Mode](#6-debugtools--ai-debug-mode)
 7. [VFX — game juice](#vfx--game-juice)
 8. [UI — antarmuka](#ui--antarmuka)
-9. [Editor — pembuat scene](#7-editor--pembuat-scene)
-10. [Ringkasan fitur](#8-ringkasan-fitur)
+9. [Audio — SFX & musik adaptif](#audio--sfx--musik-adaptif)
+10. [Editor — pembuat scene](#7-editor--pembuat-scene)
+11. [Ringkasan fitur](#8-ringkasan-fitur)
 
 ---
 
@@ -50,10 +51,13 @@ Struktur folder:
 Assets/_DungeonHunter/
 ├── Editor/
 │   ├── DungeonSceneBuilder.cs
+│   ├── AudioImportSettings.cs
 │   ├── KayKitImportSettings.cs
 │   ├── KayKitVisuals.cs
 │   └── VFXAssets.cs
 ├── ThirdParty/KayKit/   model, animasi, tekstur KayKit (CC0)
+├── ThirdParty/Kenney/   efek suara Kenney (CC0), dimuat lewat Resources
+├── Audio/Resources/     musik & ambience prosedural (hasil Tools/AudioGen/generate_music.py)
 ├── Animation/           Animator Controller (dibuat otomatis oleh builder)
 └── Scripts/
     ├── AI/          AIPerception, AIMemory, EnemyAI, MeleeEnemy, RangedEnemy, Projectile,
@@ -62,6 +66,7 @@ Assets/_DungeonHunter/
     ├── DebugTools/  AIDebugManager, EnemyDebugVisual, NavigationDebugVisual
     ├── Gameplay/    ProximityInteractable, KeyPickup, LockedDoor, ArtifactPickup, Portcullis, SpikeTrap
     ├── UI/          GameUI, UIKit, UIButtonFX
+    ├── Audio/       AudioManager, SoundLibrary, MusicDirector, FootstepAudio
     ├── VFX/         VFXManager, SlashArc, TelegraphLine, DamageFeedback, TorchFX, AmbientSparkles
     └── Player/      PlayerController, PlayerCombat, TopDownCamera
 ```
@@ -551,6 +556,62 @@ Efek tombol: membesar dan teks memutih saat di-hover, "punch" kecil saat diklik.
 
 ---
 
+## Audio — SFX & musik adaptif
+
+### `SoundLibrary`
+`Scripts/Audio/SoundLibrary.cs`
+
+- Enum `Sfx` berisi semua efek suara (±50), dan tabel definisinya
+- Tiap definisi: beberapa variasi klip, volume, rentang pitch acak, seberapa 3D, jarak terdengar, cooldown
+- Volume tiap suara sudah diseimbangkan dari analisis loudness klip, sehingga tidak ada yang terlalu keras/pelan
+- Klip diambil acak tanpa mengulang klip yang sama dua kali berturut-turut
+
+### `AudioManager`
+`Scripts/Audio/AudioManager.cs`
+
+- `AudioManager.Play(Sfx, posisi)` dipanggil dari kode gameplay, AI, dan UI
+- Pool 32 `AudioSource` (tanpa Instantiate/Destroy saat bermain)
+- `AudioListener` mengikuti **player** dengan arah kamera, jadi suara musuh di kiri layar terdengar di telinga kiri dan makin jauh makin pelan
+- Slow-motion → pitch SFX turun; Pause → SFX gameplay berhenti, suara UI tetap jalan
+- Volume Musik & Efek disimpan di `PlayerPrefs` (slider di menu Pause)
+- Ambience: tetesan air acak di sekitar player
+
+### `MusicDirector` — musik adaptif
+`Scripts/Audio/MusicDirector.cs`
+
+Musik membaca **state AI** setiap frame:
+
+| Kondisi | Mode |
+|---|---|
+| Ada musuh `Chase` / `Attack` / `Reposition` | **COMBAT** (bertahan 4 detik setelah pengejaran berhenti) |
+| Ada musuh `Investigate` / `Search` / `Flee` | **TENSION** |
+| Guardian bertarung (pintu terbuka & tidak sedang `Guard`) | **BOSS** |
+| Guardian `IsEnraged` | **BOSS PHASE 2** |
+| Tidak ada yang waspada | **EXPLORE** |
+
+- 4 stem (explore, combat, boss, boss2) bertempo & berakor sama, dimulai di waktu DSP yang sama (`PlayScheduled`) sehingga selalu sinkron; perpindahan mode hanya mengubah volume (crossfade)
+- Combat masuk cepat (±1 detik), keluar pelan (±3 detik) agar tidak "putus-sambung"
+- Pause → low-pass filter (musik terdengar teredam); slow-motion juga
+- Menang / kalah → stem memudar, diganti stinger + jingle
+- Mode aktif ditampilkan di panel AI Debug (F1)
+
+### `FootstepAudio`
+`Scripts/Audio/FootstepAudio.cs`
+
+Satu langkah setiap *stride* meter yang ditempuh. Makin cepat bergerak, langkah makin rapat dan keras,
+sehingga Patrol, Chase, dan Charge Guardian terdengar berbeda.
+
+### Musik prosedural
+`Tools/AudioGen/generate_music.py` (Python + numpy/scipy)
+
+Menghasilkan stem musik (drone, pad, lonceng, taiko, bass, brass, choir), stinger victory/defeat, loop api obor,
+dan tetesan air. Loop dibuat mulus dengan pemrosesan melingkar (sinyal diulang 3x, diambil bagian tengah).
+
+### `AudioImportSettings`
+`Editor/AudioImportSettings.cs` — musik: Vorbis *Compressed In Memory*; SFX: *Decompress On Load* + mono (lebih tepat untuk 3D).
+
+---
+
 ## 7. Editor
 
 ### `DungeonSceneBuilder`
@@ -630,7 +691,8 @@ Bentuk dungeon cukup diubah dengan mengedit peta teks di file itu, lalu menjalan
 - Dungeon dengan 5 ruangan, balkon, koridor selatan, pilar penghalang pandangan, jebakan duri, dan gerbang besi
 - Player bisa bergerak, sprint, dan menyerang dengan pedang
 - Alur: cari Key → buka pintu → kalahkan Guardian → ambil Artifact → **WIN**; HP habis → **LOSE**; tekan **R** untuk main lagi
-- Main menu, cara bermain, pause, layar Victory / Defeat
+- Main menu, cara bermain, pause (dengan slider volume), layar Victory / Defeat
+- Efek suara 3D untuk combat, AI, level, dan UI; musik adaptif yang mengikuti state AI
 - HUD (HP, Key, checklist objective, bar boss), toast pesan, dan vignette saat kena damage
 
 ### AI (materi Pertemuan 1–7)
@@ -665,5 +727,5 @@ Bentuk dungeon cukup diubah dengan mengedit peta teks di file itu, lalu menjalan
 | Klik kiri / Space | Serang |
 | Shift | Sprint (lebih berisik) |
 | F1 | AI Debug Mode |
-| Esc | Pause / lanjutkan |
+| Esc | Pause / lanjutkan (+ atur volume) |
 | R | Main lagi (setelah menang / kalah) |

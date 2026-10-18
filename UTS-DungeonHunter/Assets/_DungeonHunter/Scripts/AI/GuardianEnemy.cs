@@ -195,6 +195,9 @@ namespace DungeonHunter
                 VFXManager.Sparks(transform.position + Vector3.up * 1.5f, Vector3.up, EnrageColor, 30, 8f, 1.3f);
                 VFXManager.Shake(0.55f);
                 VFXManager.FloatingLabel(transform.position + Vector3.up * 4f, "ENRAGED!", EnrageColor, 36f);
+                AudioManager.Play(Sfx.EnrageBoom, transform.position);
+                AudioManager.Play(Sfx.Gong, transform.position, 1f, 0.9f, 0.1f);
+                AudioManager.Play(Sfx.SlamWindup, transform.position, 1.2f, 0.85f);
                 if (enrageAura == null)
                     enrageAura = VFXManager.Aura(transform, EnrageColor, 1.1f, 3f);
                 if (GameManager.Instance != null)
@@ -243,6 +246,7 @@ namespace DungeonHunter
                 ChangeState(EnemyState.Attack, "Player dalam jangkauan → Ground Slam");
                 PlayAttackAnimation();
                 VFXManager.Telegraph(transform.position, slamRadius, slamWindup, SlamColor);
+                AudioManager.Play(Sfx.SlamWindup, transform.position);
                 if (hitFlash != null)
                     hitFlash.Flash(slamColor, slamWindup);
             }
@@ -269,6 +273,8 @@ namespace DungeonHunter
             VFXManager.Debris(p + Vector3.up * 0.3f, new Color(0.4f, 0.38f, 0.42f), 14, 6f, 0.18f);
             VFXManager.Sparks(p + Vector3.up * 0.3f, Vector3.up, new Color(1f, 0.7f, 0.3f), 20, 7f, 1.4f);
             VFXManager.Shake(target != null && Vector3.Distance(target.position, p) < 9f ? 0.6f : 0.3f);
+            AudioManager.Play(Sfx.SlamBoom, p);
+            AudioManager.Play(Sfx.SlamRocks, p);
             if (targetHealth == null)
                 return;
 
@@ -291,6 +297,7 @@ namespace DungeonHunter
                 ChangeState(EnemyState.Charge, $"Phase 2, jarak {DistanceToTarget:0.0}m → Charge");
                 Vector3 toPlayer = target != null ? target.position - transform.position : transform.forward;
                 VFXManager.LineTelegraph(transform.position, toPlayer, chargeSpeed * chargeDuration + 1f, 1.8f, chargeWindup, ChargeLineColor);
+                AudioManager.Play(Sfx.ChargeWindup, transform.position);
                 if (characterAnimator != null)
                     characterAnimator.Attack2();
                 if (hitFlash != null)
@@ -311,6 +318,8 @@ namespace DungeonHunter
 
                 chargeDashing = true;
                 actionTimer = chargeDuration;
+                AudioManager.PlayAttached(Sfx.ChargeRumble, transform, chargeDuration + 0.2f);
+                AudioManager.Play(Sfx.GuardianStep, transform.position, 1.3f);
                 Reason = "Menerjang!";
             }
 
@@ -334,6 +343,7 @@ namespace DungeonHunter
                     targetHealth.TakeDamage(chargeDamage, transform.position);
                     VFXManager.HitStop(0.08f);
                     VFXManager.Shake(0.5f);
+                    AudioManager.Play(Sfx.ChargeHit, target.position);
                 }
             }
 

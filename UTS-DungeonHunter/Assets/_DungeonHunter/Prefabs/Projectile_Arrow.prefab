@@ -50,6 +50,7 @@ MonoBehaviour:
   radius: 0.15
   lifetime: 3
   fxColor: {r: 1, g: 0.65, b: 0.3, a: 1}
+  magic: 0
 --- !u!108 &993707345592269845
 Light:
   m_ObjectHideFlags: 0
