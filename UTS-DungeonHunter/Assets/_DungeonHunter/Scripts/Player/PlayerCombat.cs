@@ -23,12 +23,14 @@ namespace DungeonHunter
         [SerializeField] private float swingDuration = 0.15f;
 
         private Health health;
+        private CharacterAnimator characterAnimator;
         private float nextAttackTime;
         private readonly HashSet<Health> hitBuffer = new HashSet<Health>();
 
         private void Awake()
         {
             health = GetComponent<Health>();
+            characterAnimator = GetComponent<CharacterAnimator>();
         }
 
         private void Update()
@@ -51,6 +53,8 @@ namespace DungeonHunter
         private void Attack()
         {
             NoiseSystem.Emit(transform.position, attackNoiseRadius);
+            if (characterAnimator != null)
+                characterAnimator.Attack();
 
             if (swordPivot != null)
                 StartCoroutine(SwingRoutine());

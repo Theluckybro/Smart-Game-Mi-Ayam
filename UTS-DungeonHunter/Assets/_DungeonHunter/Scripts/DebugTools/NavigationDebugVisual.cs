@@ -116,8 +116,10 @@ namespace DungeonHunter
 
         private LineRenderer DrawGate(Portcullis gate)
         {
-            Renderer rend = gate.GetComponentInChildren<Renderer>(true);
-            Bounds b = rend != null ? rend.bounds : new Bounds(gate.transform.position, Vector3.one);
+            BoxCollider box = gate.GetComponentInChildren<BoxCollider>(true);
+            Bounds b = box != null
+                ? new Bounds(box.transform.position, Vector3.Scale(box.size, box.transform.lossyScale))
+                : new Bounds(gate.transform.position, Vector3.one);
             float y = gate.transform.position.y + LineY;
             Vector3 p0 = new Vector3(b.min.x, y, b.min.z);
             Vector3 p1 = new Vector3(b.max.x, y, b.min.z);

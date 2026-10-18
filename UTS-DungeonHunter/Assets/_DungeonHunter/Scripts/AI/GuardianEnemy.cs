@@ -177,6 +177,8 @@ namespace DungeonHunter
                 actionTimer = enrageDuration;
                 StopMoving();
                 ChangeState(EnemyState.Enrage, $"HP {health.Normalized:P0} ≤ 50% → Phase 2");
+                if (characterAnimator != null)
+                    characterAnimator.Taunt();
                 if (hitFlash != null)
                     hitFlash.Flash(enrageColor, enrageDuration);
                 NoiseSystem.Emit(transform.position, 15f);
@@ -222,6 +224,7 @@ namespace DungeonHunter
                 actionTimer = slamWindup;
                 StopMoving();
                 ChangeState(EnemyState.Attack, "Player dalam jangkauan → Ground Slam");
+                PlayAttackAnimation();
                 if (hitFlash != null)
                     hitFlash.Flash(slamColor, slamWindup);
             }
@@ -259,6 +262,8 @@ namespace DungeonHunter
                 actionTimer = chargeWindup;
                 StopMoving();
                 ChangeState(EnemyState.Charge, $"Phase 2, jarak {DistanceToTarget:0.0}m → Charge");
+                if (characterAnimator != null)
+                    characterAnimator.Attack2();
                 if (hitFlash != null)
                     hitFlash.Flash(chargeColor, chargeWindup);
             }

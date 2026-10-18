@@ -144,6 +144,7 @@ namespace DungeonHunter
             {
                 isAiming = true;
                 aimTimer = aimTime;
+                PlayAttackAnimation();
                 if (hitFlash != null)
                     hitFlash.Flash(aimColor, aimTime);
             }

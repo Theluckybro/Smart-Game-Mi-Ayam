@@ -6,10 +6,12 @@ namespace DungeonHunter
     /// <summary>
     /// Visual feedback: renderer berkedip saat terkena damage,
     /// dan bisa dipakai untuk "telegraph" serangan enemy.
+    /// Memakai tint _BaseColor + _EmissionColor agar tetap terlihat pada model bertekstur.
     /// </summary>
     public class HitFlash : MonoBehaviour
     {
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
 
         [SerializeField] private Color flashColor = Color.white;
         [SerializeField] private float flashDuration = 0.1f;
@@ -72,7 +74,8 @@ namespace DungeonHunter
                 if (on)
                 {
                     r.GetPropertyBlock(block);
-                    block.SetColor(BaseColorId, color);
+                    block.SetColor(BaseColorId, Color.Lerp(Color.white, color, 0.6f));
+                    block.SetColor(EmissionColorId, color * 0.7f);
                     r.SetPropertyBlock(block);
                 }
                 else

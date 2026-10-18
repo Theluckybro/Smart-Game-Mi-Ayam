@@ -15,6 +15,12 @@ mengalahkan **Crypt Guardian**, lalu mengambil **Ancient Artifact**.
 > | ✅ Ranged AI | ✅ Navigation (Area Cost, NavMeshLink, Dynamic Obstacle, Partial Path) |
 > | ✅ Maintain Distance | ✅ Guardian Behavior (Behavior Tree, Phase 2) |
 
+![Overview dungeon](Docs/images/screenshot_overview.png)
+
+![Karakter](Docs/images/screenshot_characters.png)
+
+*Knight (player), Skeleton Warrior, Skeleton Crossbowman, Skeleton Mage, Crypt Guardian*
+
 ## Cara membuka
 
 1. Unity Hub → **Add project from disk** → pilih folder `UTS-DungeonHunter`.
@@ -66,7 +72,7 @@ Perception ──► Memory ──► Decision (FSM / Behavior Tree) ──► N
 | Enemy | Jumlah | Perilaku |
 |---|---|---|
 | **Skeleton Warrior** (Melee AI) | 2 | Patroli waypoint → Chase → Attack (windup, bisa dihindari). Kehilangan player → ke Last Known Position → Search → Patrol. HP ≤ 30% → Flee |
-| **Skeleton Archer** (Ranged AI) | 2 | Berjaga & look-around → **Maintain Distance** 5–9 m (mendekat / menembak / mundur). Satu archer berjaga di **balkon**. HP ≤ 30% → Flee |
+| **Skeleton Crossbowman & Skeleton Mage** (Ranged AI) | 2 | Berjaga & look-around → **Maintain Distance** 5–9 m (mendekat / menembak / mundur). Crossbowman berjaga di **balkon**. HP ≤ 30% → Flee |
 | **Crypt Guardian** (Guardian Behavior) | 1 | **Behavior Tree**: jaga pos, kejar di dalam arena (leash 10 m), Ground Slam, Phase 2 (HP ≤ 50%: lebih cepat + Charge), kembali ke pos + regen jika player kabur |
 
 ### FSM Melee
@@ -132,8 +138,29 @@ Retreat Point, dan status gerbang besi.
 - [x] **Guardian Behavior** — Behavior Tree, leash, Ground Slam, Phase 2 (Enrage + Charge)
 - [x] Objective lengkap: Key → pintu → Guardian → Artifact
 
+**Aset & animasi**
+- [x] Karakter KayKit (Knight + 4 skeleton) dengan senjata di slot tangan
+- [x] Animator per tipe karakter: idle / jalan / lari, serang, kena hit, mati, taunt
+- [x] Environment KayKit: lantai, fasad dinding, pilar, gerbang, jebakan duri, props, banner
+
 **Sisa (polish)**
-- [ ] Aset final, animasi, audio, VFX, UI, video demo
+- [ ] Audio (SFX & ambience), VFX, UI final (main menu, HUD uGUI), video demo
+
+## Aset & kredit
+
+Semua aset 3D dan animasi berasal dari **KayKit** oleh Kay Lousberg, lisensi **CC0**
+(bebas dipakai, tanpa wajib atribusi). Lisensi asli ada di `Assets/_DungeonHunter/ThirdParty/KayKit/Licenses/`.
+
+| Pack | Dipakai untuk |
+|---|---|
+| [KayKit Adventurers](https://kaylousberg.itch.io/kaykit-adventurers) | Knight (player), pedang, perisai |
+| [KayKit Skeletons](https://kaylousberg.itch.io/kaykit-skeletons) | Skeleton Warrior, Rogue (crossbow), Mage, Guardian (Warrior diperbesar), senjata, panah |
+| [KayKit Character Animations](https://kaylousberg.itch.io/kaykit-character-animations) | Animasi Rig_Medium |
+| [KayKit Dungeon Remastered](https://kaylousberg.itch.io/kaykit-dungeon-remastered) | Lantai, dinding, pilar, gerbang, jebakan duri, kunci, props, banner |
+
+File zip asli disimpan di `AssetSources/` (tidak di-commit, ±130 MB). Hanya file yang dipakai
+yang disalin ke `Assets/_DungeonHunter/ThirdParty/KayKit/`. Pengaturan import otomatis ada di
+`Editor/KayKitImportSettings.cs`; pemasangan model, material, dan Animator di `Editor/KayKitVisuals.cs`.
 
 ## Pembagian kerja (usulan)
 

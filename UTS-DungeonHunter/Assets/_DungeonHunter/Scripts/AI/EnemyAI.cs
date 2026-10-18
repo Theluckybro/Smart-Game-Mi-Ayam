@@ -79,6 +79,7 @@ namespace DungeonHunter
         protected AIMemory memory;
         protected Health health;
         protected HitFlash hitFlash;
+        protected CharacterAnimator characterAnimator;
         protected Transform target;
         protected Health targetHealth;
 
@@ -142,6 +143,7 @@ namespace DungeonHunter
             memory = GetComponent<AIMemory>();
             health = GetComponent<Health>();
             hitFlash = GetComponent<HitFlash>();
+            characterAnimator = GetComponent<CharacterAnimator>();
             scratchPath = new NavMeshPath();
 
             if (target == null && perception.Target != null)
@@ -609,6 +611,14 @@ namespace DungeonHunter
 
         private IEnumerator DeathRoutine()
         {
+            // Model beranimasi: animasi Death dimainkan oleh CharacterAnimator
+            if (characterAnimator != null && characterAnimator.Animator != null)
+            {
+                yield return new WaitForSeconds(3f);
+                gameObject.SetActive(false);
+                yield break;
+            }
+
             Quaternion start = transform.rotation;
             Quaternion end = start * Quaternion.Euler(-90f, 0f, 0f);
             float t = 0f;
@@ -661,6 +671,12 @@ namespace DungeonHunter
 
             transform.rotation = Quaternion.RotateTowards(transform.rotation,
                 Quaternion.LookRotation(dir), turnSpeed * Time.deltaTime);
+        }
+
+        protected void PlayAttackAnimation()
+        {
+            if (characterAnimator != null)
+                characterAnimator.Attack();
         }
 
         protected float DistanceToTarget =>

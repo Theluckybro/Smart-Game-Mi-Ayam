@@ -24,8 +24,8 @@ namespace DungeonHunter
 
         private void Awake()
         {
-            obstacle = gatePanel.GetComponent<NavMeshObstacle>();
-            gateCollider = gatePanel.GetComponent<Collider>();
+            obstacle = gatePanel.GetComponentInChildren<NavMeshObstacle>(true);
+            gateCollider = gatePanel.GetComponentInChildren<Collider>(true);
             closedLocalPos = gatePanel.localPosition;
 
             gatePanel.localPosition = closedLocalPos + Vector3.up * openHeight;

@@ -47,11 +47,15 @@ Struktur folder:
 ```text
 Assets/_DungeonHunter/
 ├── Editor/
-│   └── DungeonSceneBuilder.cs
+│   ├── DungeonSceneBuilder.cs
+│   ├── KayKitImportSettings.cs
+│   └── KayKitVisuals.cs
+├── ThirdParty/KayKit/   model, animasi, tekstur KayKit (CC0)
+├── Animation/           Animator Controller (dibuat otomatis oleh builder)
 └── Scripts/
     ├── AI/          AIPerception, AIMemory, EnemyAI, MeleeEnemy, RangedEnemy, Projectile,
     │                BehaviorTree, GuardianEnemy
-    ├── Core/        Health, NoiseSystem, HitFlash, GameManager, GameHUD
+    ├── Core/        Health, NoiseSystem, HitFlash, CharacterAnimator, GameManager, GameHUD
     ├── DebugTools/  AIDebugManager, EnemyDebugVisual, NavigationDebugVisual
     ├── Gameplay/    ProximityInteractable, KeyPickup, LockedDoor, ArtifactPickup, Portcullis, SpikeTrap
     └── Player/      PlayerController, PlayerCombat, TopDownCamera
@@ -88,6 +92,24 @@ Feedback visual dengan mengubah warna badan sementara.
 
 - Putih saat kena damage
 - Dipakai juga sebagai tanda serangan enemy: **kuning** saat melee ancang-ancang, **oranye** saat archer membidik
+- Memakai tint `_BaseColor` + `_EmissionColor`, supaya tetap terlihat pada model bertekstur
+
+### `CharacterAnimator`
+`Scripts/Core/CharacterAnimator.cs`
+
+Penghubung antara logika (AI / player) dan Animator model KayKit.
+
+| Parameter Animator | Sumber |
+|---|---|
+| `Speed` | Dihitung dari perpindahan posisi tiap frame → blend idle / jalan / lari |
+| `Attack` | `PlayerCombat`, `MeleeEnemy` (saat windup), `RangedEnemy` (saat membidik), Guardian (Slam) |
+| `Attack2` | Guardian (windup Charge) |
+| `Taunt` | Guardian (Enrage / Phase 2) |
+| `Hit` | Otomatis dari event `Health.Damaged` (Guardian tidak bereaksi agar serangannya tidak terputus) |
+| `Dead` | Otomatis dari event `Health.Died` |
+
+Karena kecepatan diambil dari perpindahan posisi, animasi tetap benar untuk NavMeshAgent,
+CharacterController, lompatan NavMeshLink, maupun Charge Guardian.
 
 ### `GameManager`
 `Scripts/Core/GameManager.cs`
@@ -233,7 +255,7 @@ FSM Melee:
 ### `RangedEnemy`
 `Scripts/AI/RangedEnemy.cs`
 
-**Ranged AI + Maintain Distance** - Skeleton Archer (×2, salah satunya berjaga di balkon).
+**Ranged AI + Maintain Distance** - Skeleton Crossbowman (berjaga di balkon) dan Skeleton Mage.
 
 Perilaku berdasarkan jarak ke player:
 
@@ -433,14 +455,43 @@ Membangun seluruh scene otomatis dari peta teks. Jalankan lewat menu **Dungeon H
 
 Yang dibuat:
 
-- Lantai, dinding, balkon 1.4 m + ramp
-- Volume area `Trap` lalu bake NavMesh
+- Lantai, dinding, balkon 1.4 m + ramp (collider kubus sederhana untuk NavMesh)
+- Volume area `Trap`, obor, dan props ber-collider, lalu bake NavMesh
+- Visual KayKit: ubin lantai per sel, fasad dinding di setiap sisi yang menghadap lantai, pilar, banner
 - NavMeshLink lompat turun dari balkon
-- Jebakan duri, gerbang besi, obor (lampu)
-- Player dan kamera
-- 2 Melee, 2 Ranged, 1 Guardian, Retreat Point
-- Key, pintu, Artifact (bersegel)
-- Material dan prefab Projectile
+- Jebakan duri (grate + duri KayKit), gerbang besi dan pintu (`wall_gated`)
+- Player (Knight) dan kamera
+- 2 Melee, 2 Ranged, 1 Guardian (model skeleton + senjata), Retreat Point
+- Key (model kunci), pintu, Artifact (bersegel, di atas pilar)
+- Material dan prefab proyektil (bola sihir untuk Mage, panah untuk Crossbowman)
+
+### `KayKitImportSettings`
+`Editor/KayKitImportSettings.cs`
+
+`AssetPostprocessor` yang otomatis mengatur import aset KayKit:
+
+- Karakter & animasi: rig **Generic** (Rig_Medium), avatar dari model sendiri
+- Animasi: clip berisi Idle / Walking / Running / Aiming di-loop
+- Senjata & dungeon: mesh statis tanpa rig
+- Material FBX tidak di-import (material URP dibuat oleh `KayKitVisuals`)
+
+### `KayKitVisuals`
+`Editor/KayKitVisuals.cs`
+
+Helper yang dipakai builder:
+
+- Membuat material URP dari tekstur KayKit (knight, skeleton, skeleton Guardian ungu, dungeon)
+- Membuat **Animator Controller** per tipe karakter: blend tree `Locomotion` (Speed: idle → jalan → lari), state `Attack`, `Attack2`, `Hit`, `Taunt` (trigger), dan `Death` (bool)
+- `AttachCharacter`: memasang model, menyesuaikan tinggi, memasang senjata ke `handslot.r` / `handslot.l`, dan menambahkan `CharacterAnimator`
+- `Place`: menaruh model dungeon dengan ukuran target (aset KayKit berskala ±2× grid game)
+
+| Karakter | Model | Senjata | Animasi serang |
+|---|---|---|---|
+| Player | Knight | Pedang + perisai | `Melee_1H_Attack_Slice_Horizontal` |
+| Skeleton Warrior | Skeleton_Warrior | Blade + perisai kecil | `Melee_1H_Attack_Chop` |
+| Skeleton Crossbowman | Skeleton_Rogue | Crossbow | `Ranged_1H_Shoot` |
+| Skeleton Mage | Skeleton_Mage | Staff | `Ranged_Magic_Shoot` |
+| Crypt Guardian | Skeleton_Warrior (3.1 m, ungu) | Kapak + perisai besar | Slam `Melee_2H_Attack_Chop`, Charge `Melee_2H_Attack_Stab`, Enrage `Skeletons_Taunt` |
 
 Legenda peta (1 karakter = 1 kotak 2×2 m):
 

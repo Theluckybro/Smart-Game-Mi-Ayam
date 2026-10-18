@@ -87,6 +87,7 @@ namespace DungeonHunter
             {
                 isWindingUp = true;
                 windupTimer = attackWindup;
+                PlayAttackAnimation();
                 hitFlash?.Flash(windupColor, attackWindup);
             }
         }

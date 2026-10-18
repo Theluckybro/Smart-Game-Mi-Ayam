@@ -9,11 +9,12 @@ using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.SceneManagement;
 using Object = UnityEngine.Object;
+using KK = DungeonHunter.EditorTools.KayKitVisuals;
 
 namespace DungeonHunter.EditorTools
 {
     /// <summary>
-    /// Membangun scene prototype "Dungeon Hunter" secara otomatis dari peta ASCII.
+    /// Membangun scene "Dungeon Hunter" secara otomatis dari peta ASCII.
     /// Menu: Dungeon Hunter → Build Prototype Scene
     ///
     /// Legenda peta (1 karakter = 1 sel 2x2 meter):
@@ -26,11 +27,18 @@ namespace DungeonHunter.EditorTools
     ///
     /// Struktur tambahan (didefinisikan lewat konstanta, bukan karakter peta):
     ///   Balkon setinggi 1.4 m di ruang barat + ramp naik + NavMeshLink untuk lompat turun.
+    ///
+    /// Visual memakai aset KayKit (CC0) di Assets/_DungeonHunter/ThirdParty/KayKit.
+    /// Collider & NavMesh tetap memakai geometri sederhana (kubus) agar navigasi stabil.
     /// </summary>
     public static class DungeonSceneBuilder
     {
         private const float Cell = 2f;
         private const float WallHeight = 2.5f;
+        private const float WallCapThickness = 0.06f;
+
+        // Fasad didorong sedikit ke arah lantai supaya tidak sebidang dengan fasad lain di sudut luar
+        private const float FacadeOffset = 0.015f;
 
         // Balkon ruang barat (baris 9–11, kolom 1–5) + ramp (baris 9–10, kolom 6–7, naik ke arah barat)
         private const int BalconyRowMin = 9, BalconyRowMax = 11, BalconyColMin = 1, BalconyColMax = 5;
@@ -64,11 +72,36 @@ namespace DungeonHunter.EditorTools
             "###########..##############..###",
             "###########.........S...L....###",
             "########........################",
-            "########...L....################",
+            "########......L.################",
             "########...P....################",
             "########........################",
             "########........################",
             "################################",
+        };
+
+        // Props dekorasi: (model, baris, kolom, ukuran horizontal terpanjang, rotasi Y)
+        private static readonly (string model, int row, int col, float size, float yaw)[] Props =
+        {
+            ("barrel_large", 16, 1, 1.3f, 0f),
+            ("barrel_small_stack", 16, 2, 1.3f, 30f),
+            ("crates_stacked", 9, 24, 1.7f, 0f),
+            ("box_stacked", 16, 24, 1.5f, 90f),
+            ("keg", 19, 8, 1.3f, 90f),
+            ("table_medium_decorated_A", 23, 14, 1.8f, 0f),
+            ("chest_gold", 1, 20, 1.5f, 180f),
+            ("chest", 1, 11, 1.5f, 180f),
+            ("rubble_half", 4, 21, 1.6f, 0f),
+        };
+
+        // Dekorasi dinding: (model, baris dinding, kolom dinding, baris lantai, kolom lantai)
+        private static readonly (string model, int wr, int wc, int fr, int fc)[] WallDecor =
+        {
+            ("banner_red", 8, 12, 9, 12),
+            ("banner_red", 8, 19, 9, 19),
+            ("banner_shield_red", 0, 13, 1, 13),
+            ("banner_shield_red", 0, 18, 1, 18),
+            ("sword_shield", 0, 15, 1, 15),
+            ("banner_patternA_red", 24, 9, 23, 9),
         };
 
         private static readonly Dictionary<string, Material> Materials = new Dictionary<string, Material>();
@@ -101,17 +134,20 @@ namespace DungeonHunter.EditorTools
             EnsureFolder(MaterialDir);
             EnsureFolder(PrefabDir);
             CreateMaterials();
+            KK.Init();
 
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             SetupLighting();
 
-            // ---------- LEVEL GEOMETRY ----------
+            // ---------- LEVEL GEOMETRY (collider + NavMesh) ----------
             var level = new GameObject("Level");
             BuildFloor(level.transform);
             BuildWalls(level.transform);
             BuildBalcony(level.transform);
             BuildTrapVolumes(level.transform);
+            BuildTorches(level.transform);
+            BuildProps(level.transform);
 
             var surface = level.AddComponent<NavMeshSurface>();
             surface.collectObjects = CollectObjects.Children;
@@ -119,7 +155,12 @@ namespace DungeonHunter.EditorTools
             surface.BuildNavMesh();
             SaveNavMeshData(surface);
 
-            BuildTorches();
+            // ---------- VISUAL DUNGEON (KayKit, tanpa collider) ----------
+            var visuals = new GameObject("Dungeon Visuals").transform;
+            DressFloor(visuals);
+            DressWalls(visuals);
+            DressWallDecor(visuals);
+
             BuildJumpLink();
             BuildSpikeTraps();
 
@@ -142,7 +183,8 @@ namespace DungeonHunter.EditorTools
 
             // ---------- ENEMIES ----------
             var enemies = new GameObject("Enemies").transform;
-            Projectile projectilePrefab = CreateProjectilePrefab();
+            Projectile magicProjectile = CreateMagicProjectilePrefab();
+            Projectile arrowProjectile = CreateArrowProjectilePrefab();
 
             int meleeIndex = 0;
             foreach (Vector3 p in CellsOf('M'))
@@ -157,8 +199,9 @@ namespace DungeonHunter.EditorTools
             int rangedIndex = 0;
             foreach (Vector3 p in CellsOf('R'))
             {
-                var e = CreateRanged(enemies, p, rangedIndex + 1, projectilePrefab);
-                e.Setup($"Skeleton Archer {rangedIndex + 1}", player.transform, new List<Transform>(), retreats);
+                bool crossbow = rangedIndex == 0;
+                var e = CreateRanged(enemies, p, rangedIndex + 1, crossbow, crossbow ? arrowProjectile : magicProjectile);
+                e.Setup(crossbow ? "Skeleton Crossbowman" : "Skeleton Mage", player.transform, new List<Transform>(), retreats);
                 rangedIndex++;
             }
 
@@ -194,13 +237,21 @@ namespace DungeonHunter.EditorTools
         private static bool OnBalcony(int row, int col) =>
             row >= BalconyRowMin && row <= BalconyRowMax && col >= BalconyColMin && col <= BalconyColMax;
 
+        private static bool OnRamp(int row, int col) =>
+            row >= RampRowMin && row <= RampRowMax && col >= RampColMin && col <= RampColMax;
+
+        private static bool IsWall(int row, int col) =>
+            row < 0 || row >= Rows || col < 0 || col >= Cols || Map[row][col] == '#';
+
+        private static float GroundHeight(int row, int col) => OnBalcony(row, col) ? BalconyHeight : 0f;
+
         /// <summary>Posisi dunia sebuah sel, termasuk ketinggian lantai (balkon = 1.4 m).</summary>
         private static IEnumerable<Vector3> CellsOf(char c)
         {
             for (int r = 0; r < Rows; r++)
                 for (int col = 0; col < Cols; col++)
                     if (Map[r][col] == c)
-                        yield return CellToWorld(r, col) + Vector3.up * (OnBalcony(r, col) ? BalconyHeight : 0f);
+                        yield return CellToWorld(r, col) + Vector3.up * GroundHeight(r, col);
         }
 
         private static Vector3 Centroid(IEnumerable<Vector3> pts)
@@ -222,7 +273,7 @@ namespace DungeonHunter.EditorTools
         }
 
         // =====================================================
-        // LEVEL
+        // LEVEL (collider + NavMesh)
         // =====================================================
 
         private static void BuildFloor(Transform parent)
@@ -238,7 +289,10 @@ namespace DungeonHunter.EditorTools
             floor.isStatic = true;
         }
 
-        /// <summary>Dinding digabung per baris (run horizontal) supaya jumlah object sedikit.</summary>
+        /// <summary>
+        /// Dinding = kubus collider per run horizontal. Renderer-nya hanya terlihat sebagai "atap" gelap;
+        /// sisi yang menghadap lantai ditutup fasad KayKit (DressWalls).
+        /// </summary>
         private static void BuildWalls(Transform parent)
         {
             var walls = new GameObject("Walls").transform;
@@ -270,8 +324,21 @@ namespace DungeonHunter.EditorTools
                     wall.transform.SetParent(walls);
                     wall.transform.position = (a + b) * 0.5f + Vector3.up * WallHeight * 0.5f;
                     wall.transform.localScale = new Vector3(length * Cell, WallHeight, Cell);
-                    wall.GetComponent<Renderer>().sharedMaterial = Materials["Wall"];
                     wall.isStatic = true;
+
+                    // Kubus hanya collider. Kalau ikut dirender, sisinya sejajar persis dengan fasad KayKit
+                    // dan menimbulkan z-fighting (kedip). Yang terlihat dari atas cukup "tutup" tipis di atasnya.
+                    wall.GetComponent<Renderer>().enabled = false;
+
+                    // Pilar tunggal (dikelilingi lantai) memakai model pilar KayKit, tanpa tutup
+                    if (!(length == 1 && IsIsolatedPillar(r, start)))
+                    {
+                        GameObject cap = CreateVisual(PrimitiveType.Cube, walls, Vector3.zero,
+                            new Vector3(length * Cell, WallCapThickness, Cell), "WallTop");
+                        cap.name = $"WallCap_{r}_{start}";
+                        cap.transform.position = (a + b) * 0.5f + Vector3.up * (WallHeight + WallCapThickness * 0.5f);
+                        cap.isStatic = true;
+                    }
 
                     var modifier = wall.AddComponent<NavMeshModifier>();
                     modifier.overrideArea = true;
@@ -279,6 +346,9 @@ namespace DungeonHunter.EditorTools
                 }
             }
         }
+
+        private static bool IsIsolatedPillar(int r, int c) =>
+            !IsWall(r - 1, c) && !IsWall(r + 1, c) && !IsWall(r, c - 1) && !IsWall(r, c + 1);
 
         private static bool RunTouchesFloor(int row, int c0, int c1)
         {
@@ -322,7 +392,7 @@ namespace DungeonHunter.EditorTools
             ramp.transform.position = new Vector3((rampNw.x + rampSe.x) * 0.5f, BalconyHeight * 0.5f, (rampNw.z + rampSe.z) * 0.5f)
                                       - ramp.transform.up * thickness * 0.5f;
             ramp.transform.localScale = new Vector3(slopeLength, thickness, rampNw.z - rampSe.z);
-            ramp.GetComponent<Renderer>().sharedMaterial = Materials["Balcony"];
+            ramp.GetComponent<Renderer>().sharedMaterial = Materials["Wood"];
             ramp.isStatic = true;
         }
 
@@ -356,6 +426,172 @@ namespace DungeonHunter.EditorTools
             yield return Rect.MinMaxRect(minX, minZ, maxX, maxZ);
         }
 
+        /// <summary>
+        /// Obor: tiang (KayKit column) + api + point light. Tiang punya collider kecil.
+        /// Di sel sempit (koridor) hanya api + cahaya, supaya jalur NavMesh tidak tertutup.
+        /// </summary>
+        private static void BuildTorches(Transform parent)
+        {
+            var torches = new GameObject("Torches").transform;
+            torches.SetParent(parent);
+            int i = 0;
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Cols; c++)
+                {
+                    if (Map[r][c] != 'L')
+                        continue;
+
+                    Vector3 p = CellToWorld(r, c) + Vector3.up * GroundHeight(r, c);
+                    var go = new GameObject($"Torch_{i++}");
+                    go.transform.SetParent(torches);
+                    go.transform.position = p;
+
+                    bool narrow = IsWall(r - 1, c) || IsWall(r + 1, c) || IsWall(r, c - 1) || IsWall(r, c + 1);
+                    if (!narrow)
+                    {
+                        KK.Place("column", go.transform, p, Quaternion.identity, new Vector3(0.6f, 1.5f, 0f));
+                        var col = go.AddComponent<CapsuleCollider>();
+                        col.center = new Vector3(0f, 0.75f, 0f);
+                        col.height = 1.5f;
+                        col.radius = 0.35f;
+                    }
+
+                    var flame = CreateVisual(PrimitiveType.Sphere, go.transform, new Vector3(0f, narrow ? 2.3f : 1.7f, 0f), Vector3.one * 0.3f, "Flame");
+                    flame.name = "Flame";
+
+                    var lightGo = new GameObject("Light");
+                    lightGo.transform.SetParent(go.transform, false);
+                    lightGo.transform.localPosition = new Vector3(0f, 2.2f, 0f);
+                    var light = lightGo.AddComponent<Light>();
+                    light.type = LightType.Point;
+                    light.color = new Color(1f, 0.6f, 0.25f);
+                    light.range = 11f;
+                    light.intensity = 4.5f;
+                }
+        }
+
+        /// <summary>Props dekorasi dengan BoxCollider (ikut di-bake sehingga enemy berjalan memutarinya).</summary>
+        private static void BuildProps(Transform parent)
+        {
+            var props = new GameObject("Props").transform;
+            props.SetParent(parent);
+            foreach (var p in Props)
+            {
+                Vector3 pos = CellToWorld(p.row, p.col) + Vector3.up * GroundHeight(p.row, p.col);
+                var go = new GameObject(p.model);
+                go.transform.SetParent(props, false);
+                KK.Spawn(KK.DungeonPath(p.model), go.transform);
+
+                Bounds b = KK.RendererBounds(go);
+                go.transform.localScale = Vector3.one * (p.size / Mathf.Max(0.01f, Mathf.Max(b.size.x, b.size.z)));
+                go.transform.rotation = Quaternion.Euler(0f, p.yaw, 0f);
+                b = KK.RendererBounds(go);
+                go.transform.position += new Vector3(pos.x - b.center.x, pos.y - b.min.y, pos.z - b.center.z);
+
+                // Collider dihitung dari bounds model dalam ruang lokal container
+                Quaternion rot = go.transform.rotation;
+                go.transform.rotation = Quaternion.identity;
+                b = KK.RendererBounds(go);
+                var box = go.AddComponent<BoxCollider>();
+                box.center = go.transform.InverseTransformPoint(b.center);
+                box.size = b.size / go.transform.localScale.x;
+                go.transform.rotation = rot;
+            }
+        }
+
+        private static void SaveNavMeshData(NavMeshSurface surface)
+        {
+            string path = Root + "/Scenes/DungeonHunter_NavMesh.asset";
+            AssetDatabase.DeleteAsset(path);
+            AssetDatabase.CreateAsset(surface.navMeshData, path);
+        }
+
+        // =====================================================
+        // VISUAL DUNGEON (KayKit)
+        // =====================================================
+
+        /// <summary>Ubin lantai KayKit per sel (2x2 m). Sel jebakan memakai grate (dibuat di BuildSpikeTraps).</summary>
+        private static void DressFloor(Transform parent)
+        {
+            var floor = new GameObject("Floor Tiles").transform;
+            floor.SetParent(parent);
+            var rng = new System.Random(7);
+
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Cols; c++)
+                {
+                    char ch = Map[r][c];
+                    if (ch == '#' || ch == 'T' || OnRamp(r, c))
+                        continue;
+
+                    double roll = rng.NextDouble();
+                    string model = roll < 0.05 ? "floor_tile_large_rocks" : roll < 0.09 ? "floor_tile_small_broken_A" : "floor_tile_large";
+                    Vector3 pos = CellToWorld(r, c) + Vector3.up * (GroundHeight(r, c) - 0.05f);
+                    var tile = KK.Place(model, floor, pos, Quaternion.Euler(0f, 90f * rng.Next(4), 0f), new Vector3(Cell, 0f, Cell));
+                    tile.isStatic = true;
+                }
+        }
+
+        /// <summary>
+        /// Fasad dinding KayKit di setiap sisi sel dinding yang berbatasan dengan lantai.
+        /// Pilar tunggal memakai model pilar.
+        /// </summary>
+        private static void DressWalls(Transform parent)
+        {
+            var walls = new GameObject("Wall Facades").transform;
+            walls.SetParent(parent);
+            var rng = new System.Random(11);
+            (int dr, int dc)[] dirs = { (-1, 0), (1, 0), (0, -1), (0, 1) };
+
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Cols; c++)
+                {
+                    if (!IsWall(r, c))
+                        continue;
+
+                    Vector3 center = CellToWorld(r, c);
+                    if (IsIsolatedPillar(r, c))
+                    {
+                        var pillar = KK.Place("pillar", walls, center, Quaternion.identity, new Vector3(Cell * 0.9f, WallHeight, Cell * 0.9f));
+                        pillar.isStatic = true;
+                        continue;
+                    }
+
+                    foreach (var (dr, dc) in dirs)
+                    {
+                        int fr = r + dr, fc = c + dc;
+                        if (IsWall(fr, fc))
+                            continue;
+
+                        // arah dari dinding ke lantai (dunia): baris naik = z turun
+                        Vector3 toFloor = new Vector3(dc, 0f, -dr);
+                        Vector3 boundary = center + toFloor * (Cell * 0.5f);
+                        string model = rng.NextDouble() < 0.15 ? "wall_cracked" : "wall";
+                        var facade = KK.Place(model, walls, boundary - toFloor * (0.25f - FacadeOffset),
+                            Quaternion.LookRotation(toFloor), new Vector3(Cell, WallHeight, 0.5f));
+                        facade.isStatic = true;
+                    }
+                }
+        }
+
+        /// <summary>Banner dan perisai di dinding (ikut skala fasad 0.5 agar proporsinya sama).</summary>
+        private static void DressWallDecor(Transform parent)
+        {
+            var decor = new GameObject("Wall Decor").transform;
+            decor.SetParent(parent);
+            foreach (var d in WallDecor)
+            {
+                Vector3 toFloor = new Vector3(d.fc - d.wc, 0f, -(d.fr - d.wr));
+                Vector3 boundary = CellToWorld(d.wr, d.wc) + toFloor * (Cell * 0.5f);
+                var go = new GameObject(d.model);
+                go.transform.SetParent(decor, false);
+                KK.Spawn(KK.DungeonPath(d.model), go.transform);
+                go.transform.rotation = Quaternion.LookRotation(toFloor);
+                go.transform.localScale = new Vector3(0.5f, 0.55f, 0.5f);
+                go.transform.position = boundary - toFloor * 0.25f;
+            }
+        }
+
         /// <summary>NavMeshLink satu arah: lompat turun dari tepi selatan balkon ke lantai.</summary>
         private static void BuildJumpLink()
         {
@@ -375,6 +611,9 @@ namespace DungeonHunter.EditorTools
             link.area = NavMesh.GetAreaFromName("Jump");
         }
 
+        /// <summary>
+        /// Jebakan duri: grate KayKit sebagai lantai + floor_tile_big_spikes sebagai duri yang naik-turun.
+        /// </summary>
         private static void BuildSpikeTraps()
         {
             foreach (Rect r in TrapRects())
@@ -382,67 +621,46 @@ namespace DungeonHunter.EditorTools
                 var trap = new GameObject("SpikeTrap");
                 trap.transform.position = new Vector3(r.center.x, 0f, r.center.y);
 
-                CreateVisual(PrimitiveType.Cube, trap.transform, new Vector3(0f, 0.01f, 0f),
-                    new Vector3(r.width, 0.02f, r.height), "TrapPlate");
-
                 var spikes = new GameObject("Spikes").transform;
                 spikes.SetParent(trap.transform, false);
-                spikes.localPosition = new Vector3(0f, -0.35f, 0f);
-                for (float x = -r.width * 0.5f + 0.5f; x < r.width * 0.5f; x += 1f)
-                    for (float z = -r.height * 0.5f + 0.5f; z < r.height * 0.5f; z += 1f)
-                        CreateVisual(PrimitiveType.Cube, spikes, new Vector3(x, 0f, z), new Vector3(0.12f, 0.6f, 0.12f), "Metal");
+
+                for (float x = r.xMin + Cell * 0.5f; x < r.xMax; x += Cell)
+                    for (float z = r.yMin + Cell * 0.5f; z < r.yMax; z += Cell)
+                    {
+                        Vector3 p = new Vector3(x, 0f, z);
+                        KK.Place("floor_tile_big_grate", trap.transform, p + Vector3.down * 0.05f, Quaternion.identity, new Vector3(Cell, 0f, Cell));
+                        KK.Place("floor_tile_big_spikes", spikes, p, Quaternion.identity, new Vector3(Cell * 0.9f, 0f, Cell * 0.9f));
+                    }
+
+                // Duri disembunyikan di bawah lantai; SpikeTrap menaikkannya saat aktif
+                Bounds sb = KK.RendererBounds(spikes.gameObject);
+                spikes.localPosition = new Vector3(0f, -sb.size.y - 0.02f, 0f);
 
                 var spikeTrap = trap.AddComponent<SpikeTrap>();
                 var so = new SerializedObject(spikeTrap);
                 so.FindProperty("size").vector3Value = new Vector3(r.width, 1f, r.height);
                 so.FindProperty("spikes").objectReferenceValue = spikes;
+                so.FindProperty("spikeUpHeight").floatValue = sb.size.y * 0.85f;
                 so.ApplyModifiedPropertiesWithoutUndo();
             }
-        }
-
-        private static void SaveNavMeshData(NavMeshSurface surface)
-        {
-            string path = Root + "/Scenes/DungeonHunter_NavMesh.asset";
-            AssetDatabase.DeleteAsset(path);
-            AssetDatabase.CreateAsset(surface.navMeshData, path);
         }
 
         private static void SetupLighting()
         {
             RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-            RenderSettings.ambientLight = new Color(0.22f, 0.2f, 0.27f);
+            RenderSettings.ambientLight = new Color(0.3f, 0.28f, 0.36f);
             RenderSettings.fog = true;
             RenderSettings.fogColor = new Color(0.05f, 0.04f, 0.07f);
             RenderSettings.fogMode = FogMode.Linear;
-            RenderSettings.fogStartDistance = 22f;
-            RenderSettings.fogEndDistance = 45f;
+            RenderSettings.fogStartDistance = 24f;
+            RenderSettings.fogEndDistance = 48f;
 
             var sun = new GameObject("Moonlight").AddComponent<Light>();
             sun.type = LightType.Directional;
-            sun.color = new Color(0.55f, 0.6f, 0.85f);
-            sun.intensity = 0.45f;
+            sun.color = new Color(0.6f, 0.65f, 0.9f);
+            sun.intensity = 0.55f;
             sun.shadows = LightShadows.Soft;
             sun.transform.rotation = Quaternion.Euler(55f, -30f, 0f);
-        }
-
-        private static void BuildTorches()
-        {
-            var torches = new GameObject("Torches").transform;
-            int i = 0;
-            foreach (Vector3 p in CellsOf('L'))
-            {
-                var go = new GameObject($"Torch_{i++}");
-                go.transform.SetParent(torches);
-                go.transform.position = p + Vector3.up * 2.2f;
-                var light = go.AddComponent<Light>();
-                light.type = LightType.Point;
-                light.color = new Color(1f, 0.6f, 0.25f);
-                light.range = 10f;
-                light.intensity = 4f;
-
-                var flame = CreateVisual(PrimitiveType.Sphere, go.transform, Vector3.zero, Vector3.one * 0.25f, "Flame");
-                flame.transform.localPosition = Vector3.zero;
-            }
         }
 
         // =====================================================
@@ -462,20 +680,16 @@ namespace DungeonHunter.EditorTools
             var health = player.AddComponent<Health>();
             SetField(health, "maxHealth", 100f);
 
-            CreateVisual(PrimitiveType.Capsule, player.transform, new Vector3(0f, 1f, 0f), new Vector3(0.8f, 1f, 0.8f), "Player");
-            CreateVisual(PrimitiveType.Cube, player.transform, new Vector3(0f, 1.5f, 0.35f), new Vector3(0.55f, 0.18f, 0.2f), "Visor");
-
-            var swordPivot = new GameObject("SwordPivot").transform;
-            swordPivot.SetParent(player.transform, false);
-            swordPivot.localPosition = new Vector3(0f, 1.1f, 0f);
-            swordPivot.localRotation = Quaternion.Euler(0f, -35f, 0f);
-            CreateVisual(PrimitiveType.Cube, swordPivot, new Vector3(0.35f, 0f, 0.9f), new Vector3(0.1f, 0.1f, 1.3f), "Sword");
+            KK.AttachCharacter(player, new KK.CharacterSpec
+            {
+                Model = "Knight", Material = "Knight", Controller = "Player", Height = 2.1f,
+                RightWeapon = "sword_1handed", RightWeaponSize = 0.62f,
+                LeftWeapon = "shield_badge", LeftWeaponSize = 0.4f
+            });
 
             player.AddComponent<HitFlash>();
             player.AddComponent<PlayerController>();
-            var combat = player.AddComponent<PlayerCombat>();
-            SetField(combat, "swordPivot", swordPivot);
-
+            player.AddComponent<PlayerCombat>();
             return player;
         }
 
@@ -496,7 +710,7 @@ namespace DungeonHunter.EditorTools
         }
 
         private static T CreateEnemyBase<T>(Transform parent, string objName, Vector3 pos, float radius, float height,
-            float maxHp, string materialKey, float bodyScale) where T : EnemyAI
+            float maxHp, KK.CharacterSpec model) where T : EnemyAI
         {
             var go = new GameObject(objName);
             go.transform.SetParent(parent);
@@ -518,10 +732,7 @@ namespace DungeonHunter.EditorTools
             var health = go.AddComponent<Health>();
             SetField(health, "maxHealth", maxHp);
 
-            CreateVisual(PrimitiveType.Capsule, go.transform, new Vector3(0f, height * 0.5f, 0f),
-                new Vector3(0.9f, 1f, 0.9f) * bodyScale, materialKey);
-            CreateVisual(PrimitiveType.Cube, go.transform, new Vector3(0f, height * 0.75f, 0.38f * bodyScale),
-                new Vector3(0.6f, 0.15f, 0.2f) * bodyScale, "Eyes");
+            KK.AttachCharacter(go, model);
 
             go.AddComponent<HitFlash>();
             go.AddComponent<AIPerception>();
@@ -531,18 +742,33 @@ namespace DungeonHunter.EditorTools
 
         private static MeleeEnemy CreateMelee(Transform parent, Vector3 pos, int index)
         {
-            var e = CreateEnemyBase<MeleeEnemy>(parent, $"Melee_{index}", pos, 0.45f, 2f, 60f, "Melee", 1f);
+            var e = CreateEnemyBase<MeleeEnemy>(parent, $"Melee_{index}", pos, 0.45f, 2f, 60f, new KK.CharacterSpec
+            {
+                Model = "Skeleton_Warrior", Material = "Skeleton", Controller = "SkeletonMelee", Height = 1.95f,
+                RightWeapon = "Skeleton_Blade", RightWeaponSize = 0.62f,
+                LeftWeapon = "Skeleton_Shield_Small_A", LeftWeaponSize = 0.38f
+            });
             e.GetComponent<AIPerception>().Configure(9f, 110f);
-            CreateVisual(PrimitiveType.Cube, e.transform, new Vector3(0.45f, 1f, 0.5f), new Vector3(0.12f, 0.12f, 1f), "Metal");
             return e;
         }
 
-        private static RangedEnemy CreateRanged(Transform parent, Vector3 pos, int index, Projectile prefab)
+        private static RangedEnemy CreateRanged(Transform parent, Vector3 pos, int index, bool crossbow, Projectile prefab)
         {
-            var e = CreateEnemyBase<RangedEnemy>(parent, $"Ranged_{index}", pos, 0.45f, 2f, 45f, "Ranged", 0.9f);
+            KK.CharacterSpec spec = crossbow
+                ? new KK.CharacterSpec
+                {
+                    Model = "Skeleton_Rogue", Material = "Skeleton", Controller = "SkeletonCrossbow", Height = 1.9f,
+                    RightWeapon = "Skeleton_Crossbow", RightWeaponSize = 0.6f
+                }
+                : new KK.CharacterSpec
+                {
+                    Model = "Skeleton_Mage", Material = "Skeleton", Controller = "SkeletonMage", Height = 2f,
+                    RightWeapon = "Skeleton_Staff", RightWeaponSize = 0.95f
+                };
+
+            var e = CreateEnemyBase<RangedEnemy>(parent, $"Ranged_{index}", pos, 0.45f, 2f, 45f, spec);
             e.GetComponent<AIPerception>().Configure(12f, 100f);
             SetField(e, "trapAreaCost", 8f);
-            CreateVisual(PrimitiveType.Cube, e.transform, new Vector3(-0.45f, 1.1f, 0.35f), new Vector3(0.08f, 1.1f, 0.08f), "Wood");
 
             var muzzle = new GameObject("FirePoint").transform;
             muzzle.SetParent(e.transform, false);
@@ -553,32 +779,69 @@ namespace DungeonHunter.EditorTools
 
         private static GuardianEnemy CreateGuardian(Transform parent, Vector3 pos)
         {
-            var g = CreateEnemyBase<GuardianEnemy>(parent, "Guardian", pos, 0.8f, 3f, 300f, "Guardian", 1.6f);
+            var g = CreateEnemyBase<GuardianEnemy>(parent, "Guardian", pos, 0.8f, 3f, 300f, new KK.CharacterSpec
+            {
+                Model = "Skeleton_Warrior", Material = "SkeletonGuardian", Controller = "Guardian", Height = 3.1f,
+                RightWeapon = "Skeleton_Axe", RightWeaponSize = 0.62f,
+                LeftWeapon = "Skeleton_Shield_Large_B", LeftWeaponSize = 0.45f,
+                ReactToHits = false
+            });
             g.GetComponent<AIPerception>().Configure(11f, 150f);
             SetField(g, "chaseSpeed", 3.2f);
             SetField(g, "patrolSpeed", 1.8f);
             SetField(g, "trapAreaCost", 1f);
-            CreateVisual(PrimitiveType.Cube, g.transform, new Vector3(0.9f, 1.6f, 0.4f), new Vector3(0.6f, 0.6f, 0.9f), "Metal");
-            CreateVisual(PrimitiveType.Cube, g.transform, new Vector3(-0.9f, 1.6f, 0.4f), new Vector3(0.6f, 0.6f, 0.9f), "Metal");
             return g;
         }
 
-        private static Projectile CreateProjectilePrefab()
+        private static Projectile CreateMagicProjectilePrefab()
         {
             var go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            go.name = "Projectile";
+            go.name = "Projectile_Magic";
             Object.DestroyImmediate(go.GetComponent<Collider>());
             go.transform.localScale = Vector3.one * 0.3f;
             go.GetComponent<Renderer>().sharedMaterial = Materials["Projectile"];
             go.AddComponent<Projectile>();
+            AddProjectileLight(go, new Color(0.7f, 0.4f, 1f));
+            return SavePrefab(go, "Projectile_Magic");
+        }
 
+        private static Projectile CreateArrowProjectilePrefab()
+        {
+            var go = new GameObject("Projectile_Arrow");
+            var holder = new GameObject("Model").transform;
+            holder.SetParent(go.transform, false);
+            KK.Spawn(KK.WeaponPath("Skeleton_Arrow"), holder, "Skeleton");
+
+            // Putar model agar sumbu terpanjangnya searah +Z (arah terbang proyektil)
+            Bounds b = KK.RendererBounds(holder.gameObject);
+            if (b.size.y >= b.size.x && b.size.y >= b.size.z)
+                holder.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            else if (b.size.x >= b.size.z)
+                holder.localRotation = Quaternion.Euler(0f, 90f, 0f);
+
+            b = KK.RendererBounds(holder.gameObject);
+            float longest = Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z));
+            holder.localScale = Vector3.one * (0.8f / Mathf.Max(0.01f, longest));
+            b = KK.RendererBounds(holder.gameObject);
+            holder.localPosition -= b.center - go.transform.position;
+
+            go.AddComponent<Projectile>();
+            AddProjectileLight(go, new Color(1f, 0.7f, 0.3f));
+            return SavePrefab(go, "Projectile_Arrow");
+        }
+
+        private static void AddProjectileLight(GameObject go, Color color)
+        {
             var light = go.AddComponent<Light>();
             light.type = LightType.Point;
-            light.color = new Color(1f, 0.6f, 0.1f);
+            light.color = color;
             light.range = 3f;
             light.intensity = 2f;
+        }
 
-            string path = PrefabDir + "/Projectile.prefab";
+        private static Projectile SavePrefab(GameObject go, string name)
+        {
+            string path = PrefabDir + "/" + name + ".prefab";
             GameObject prefab = PrefabUtility.SaveAsPrefabAsset(go, path);
             Object.DestroyImmediate(go);
             return prefab.GetComponent<Projectile>();
@@ -595,39 +858,57 @@ namespace DungeonHunter.EditorTools
             var visual = new GameObject("Visual").transform;
             visual.SetParent(key.transform, false);
             visual.localPosition = new Vector3(0f, 1f, 0f);
-            CreateVisual(PrimitiveType.Cube, visual, Vector3.zero, new Vector3(0.15f, 0.15f, 0.8f), "Gold");
-            CreateVisual(PrimitiveType.Cube, visual, new Vector3(0f, 0f, 0.4f), new Vector3(0.4f, 0.12f, 0.25f), "Gold");
+            GameObject model = KK.Spawn(KK.DungeonPath("key"), visual);
+            Bounds b = KK.RendererBounds(model);
+            model.transform.localScale *= 1.2f / Mathf.Max(0.01f, Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z)));
+            b = KK.RendererBounds(model);
+            model.transform.position -= b.center - visual.position;
 
             var light = key.AddComponent<Light>();
             light.type = LightType.Point;
             light.color = new Color(1f, 0.85f, 0.3f);
             light.range = 4f;
-            light.intensity = 2f;
+            light.intensity = 2.5f;
 
             var pickup = key.AddComponent<KeyPickup>();
             SetField(pickup, "visual", visual);
             SetField(pickup, "interactRadius", 1.4f);
         }
 
-        private static void CreateDoor(Vector3 pos)
+        /// <summary>
+        /// Panel bergerak = transform kosong berisi "Blocker" (kubus collider + NavMeshObstacle, tidak dirender)
+        /// dan model gerbang KayKit.
+        /// </summary>
+        private static Transform CreateGatePanel(Transform parent, Vector3 blockerScale, float yaw)
         {
-            var door = new GameObject("GuardianDoor");
-            door.transform.position = pos;
+            var panel = new GameObject("Panel").transform;
+            panel.SetParent(parent, false);
 
-            var panel = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            panel.name = "DoorPanel";
-            panel.transform.SetParent(door.transform, false);
-            panel.transform.localPosition = new Vector3(0f, WallHeight * 0.5f, 0f);
-            panel.transform.localScale = new Vector3(Cell * 2f, WallHeight, 0.6f);
-            panel.GetComponent<Renderer>().sharedMaterial = Materials["Door"];
+            var blocker = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            blocker.name = "Blocker";
+            blocker.transform.SetParent(panel, false);
+            blocker.transform.localPosition = new Vector3(0f, WallHeight * 0.5f, 0f);
+            blocker.transform.localScale = blockerScale;
+            blocker.GetComponent<Renderer>().enabled = false;
 
-            var obstacle = panel.AddComponent<NavMeshObstacle>();
+            var obstacle = blocker.AddComponent<NavMeshObstacle>();
             obstacle.carving = true;
             obstacle.shape = NavMeshObstacleShape.Box;
             obstacle.size = Vector3.one;
 
+            // Sedikit lebih sempit dari celah agar ujungnya tidak sebidang dengan fasad di kiri-kanan
+            KK.Place("wall_gated", panel, parent.position, Quaternion.Euler(0f, yaw, 0f), new Vector3(Cell * 2f - 0.12f, WallHeight - 0.02f, 0.5f));
+            return panel;
+        }
+
+        private static void CreateDoor(Vector3 pos)
+        {
+            var door = new GameObject("GuardianDoor");
+            door.transform.position = pos;
+            Transform panel = CreateGatePanel(door.transform, new Vector3(Cell * 2f, WallHeight, 0.6f), 0f);
+
             var locked = door.AddComponent<LockedDoor>();
-            SetField(locked, "doorPanel", panel.transform);
+            SetField(locked, "doorPanel", panel);
             SetField(locked, "interactRadius", 2.8f);
             SetField(locked, "bobAmplitude", 0f);
             SetField(locked, "spinSpeed", 0f);
@@ -638,11 +919,11 @@ namespace DungeonHunter.EditorTools
             var artifact = new GameObject("AncientArtifact");
             artifact.transform.position = pos;
 
-            CreateVisual(PrimitiveType.Cylinder, artifact.transform, new Vector3(0f, 0.4f, 0f), new Vector3(1.2f, 0.4f, 1.2f), "Wall");
+            KK.Place("column", artifact.transform, pos, Quaternion.identity, new Vector3(0.9f, 1f, 0f));
 
             var visual = new GameObject("Visual").transform;
             visual.SetParent(artifact.transform, false);
-            visual.localPosition = new Vector3(0f, 1.5f, 0f);
+            visual.localPosition = new Vector3(0f, 1.6f, 0f);
             var gem = CreateVisual(PrimitiveType.Cube, visual, Vector3.zero, Vector3.one * 0.5f, "Artifact");
             gem.transform.localRotation = Quaternion.Euler(45f, 0f, 45f);
 
@@ -666,21 +947,10 @@ namespace DungeonHunter.EditorTools
         {
             var gate = new GameObject("Portcullis");
             gate.transform.position = pos;
-
-            var panel = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            panel.name = "GatePanel";
-            panel.transform.SetParent(gate.transform, false);
-            panel.transform.localPosition = new Vector3(0f, WallHeight * 0.5f, 0f);
-            panel.transform.localScale = new Vector3(0.5f, WallHeight, Cell * 2f);
-            panel.GetComponent<Renderer>().sharedMaterial = Materials["Gate"];
-
-            var obstacle = panel.AddComponent<NavMeshObstacle>();
-            obstacle.carving = true;
-            obstacle.shape = NavMeshObstacleShape.Box;
-            obstacle.size = Vector3.one;
+            Transform panel = CreateGatePanel(gate.transform, new Vector3(0.5f, WallHeight, Cell * 2f), 90f);
 
             var portcullis = gate.AddComponent<Portcullis>();
-            SetField(portcullis, "gatePanel", panel.transform);
+            SetField(portcullis, "gatePanel", panel);
         }
 
         // =====================================================
@@ -712,25 +982,13 @@ namespace DungeonHunter.EditorTools
         private static void CreateMaterials()
         {
             Materials.Clear();
-            AddMaterial("Floor", new Color(0.23f, 0.22f, 0.25f));
-            AddMaterial("Wall", new Color(0.42f, 0.38f, 0.34f));
-            AddMaterial("Door", new Color(0.36f, 0.22f, 0.12f));
-            AddMaterial("Player", new Color(0.2f, 0.45f, 0.95f));
-            AddMaterial("Visor", new Color(0.9f, 0.95f, 1f), new Color(0.4f, 0.6f, 1f));
-            AddMaterial("Sword", new Color(0.85f, 0.88f, 0.92f));
-            AddMaterial("Melee", new Color(0.78f, 0.75f, 0.65f));
-            AddMaterial("Ranged", new Color(0.55f, 0.6f, 0.45f));
-            AddMaterial("Guardian", new Color(0.35f, 0.2f, 0.45f));
-            AddMaterial("Seal", new Color(0.6f, 0.2f, 1f), new Color(0.8f, 0.2f, 1.6f));
+            AddMaterial("Floor", new Color(0.12f, 0.11f, 0.13f));
+            AddMaterial("WallTop", new Color(0.16f, 0.15f, 0.17f));
             AddMaterial("Balcony", new Color(0.33f, 0.3f, 0.28f));
-            AddMaterial("TrapPlate", new Color(0.35f, 0.08f, 0.06f));
-            AddMaterial("Gate", new Color(0.25f, 0.25f, 0.28f));
-            AddMaterial("Eyes", new Color(1f, 0.2f, 0.1f), new Color(2f, 0.2f, 0.1f));
-            AddMaterial("Metal", new Color(0.55f, 0.55f, 0.6f));
             AddMaterial("Wood", new Color(0.45f, 0.3f, 0.15f));
-            AddMaterial("Gold", new Color(1f, 0.8f, 0.2f), new Color(1.2f, 0.9f, 0.2f));
             AddMaterial("Artifact", new Color(0.3f, 0.9f, 1f), new Color(0.6f, 1.8f, 2.2f));
-            AddMaterial("Projectile", new Color(1f, 0.6f, 0.1f), new Color(2f, 1f, 0.2f));
+            AddMaterial("Seal", new Color(0.6f, 0.2f, 1f), new Color(0.8f, 0.2f, 1.6f));
+            AddMaterial("Projectile", new Color(0.7f, 0.4f, 1f), new Color(1.6f, 0.8f, 2.4f));
             AddMaterial("Flame", new Color(1f, 0.6f, 0.2f), new Color(3f, 1.4f, 0.3f));
         }
 
