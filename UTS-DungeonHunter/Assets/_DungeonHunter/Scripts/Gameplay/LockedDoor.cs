@@ -68,6 +68,18 @@ namespace DungeonHunter
             AudioManager.Play(Sfx.DoorOpen, transform.position, 1f, 1f, 0.2f);
             AudioManager.Play(Sfx.DoorCreak, transform.position, 1f, 1f, 0.45f);
             GameManager.Instance.NotifyDoorOpened();
+            IntroduceGuardian();
+        }
+
+        /// <summary>Intro boss: kamera menyorot Guardian sesaat (letterbox) + bunyi gong.</summary>
+        private void IntroduceGuardian()
+        {
+            GuardianEnemy guardian = FindFirstObjectByType<GuardianEnemy>();
+            if (guardian == null || guardian.State == EnemyState.Dead)
+                return;
+            Vector3 p = guardian.transform.position;
+            TopDownCamera.Focus(p, 2.4f, 0.8f, 0.6f);
+            AudioManager.Play(Sfx.Gong, p, 0.9f, 1f, 0.5f);
         }
     }
 }

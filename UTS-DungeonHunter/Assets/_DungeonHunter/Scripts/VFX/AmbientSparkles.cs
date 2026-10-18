@@ -12,6 +12,13 @@ namespace DungeonHunter
 
         private ParticleSystem ps;
 
+        /// <summary>Dimatikan (mis. tuas sudah ditarik) → partikel berhenti dan memudar.</summary>
+        private void OnDisable()
+        {
+            if (ps != null)
+                ps.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+        }
+
         private void Start()
         {
             if (VFXManager.Instance == null)

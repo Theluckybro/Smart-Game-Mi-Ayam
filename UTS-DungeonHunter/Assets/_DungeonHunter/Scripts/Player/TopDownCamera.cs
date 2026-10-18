@@ -5,6 +5,8 @@ namespace DungeonHunter
     /// <summary>
     /// Kamera top-down yang mengikuti player dengan halus, plus camera shake berbasis "trauma":
     /// setiap hit menambah trauma (0..1), guncangan = trauma² × noise, lalu trauma meluruh.
+    /// Momen sinematik: Focus() menggeser kamera ke titik penting (Guardian muncul, Enrage, Guardian mati)
+    /// sambil zoom in; saat game berakhir kamera zoom ke player dan berputar perlahan.
     /// </summary>
     public class TopDownCamera : MonoBehaviour
     {
@@ -31,6 +33,33 @@ namespace DungeonHunter
         private float trauma;
         private float seed;
 
+        // Sinematik
+        private Vector3 focusPoint;
+        private float focusUntil = -1f;
+        private float focusZoom = 1f, focusWeight;
+        private bool focusLetterbox;
+        private float zoom = 1f, weight, orbit;
+
+        /// <summary>True saat momen sinematik (UI menampilkan letterbox).</summary>
+        public static bool CinematicActive =>
+            instance != null && ((Time.unscaledTime < instance.focusUntil && instance.focusLetterbox)
+                                 || (GameManager.Instance != null && GameManager.Instance.IsGameOver));
+
+        /// <summary>
+        /// Fokus sinematik sementara.
+        /// zoom &lt; 1 = mendekat, weight = seberapa jauh pusat kamera bergeser dari player ke titik (0..1).
+        /// </summary>
+        public static void Focus(Vector3 point, float duration, float zoomFactor = 0.7f, float shift = 0.6f, bool letterbox = true)
+        {
+            if (instance == null)
+                return;
+            instance.focusPoint = point;
+            instance.focusUntil = Time.unscaledTime + duration;
+            instance.focusZoom = zoomFactor;
+            instance.focusWeight = shift;
+            instance.focusLetterbox = letterbox;
+        }
+
         public void SetTarget(Transform newTarget) => target = newTarget;
 
         public static void Shake(float amount)
@@ -52,8 +81,27 @@ namespace DungeonHunter
             if (target == null)
                 return;
 
-            Vector3 desired = target.position + offset;
-            Quaternion baseRotation = Quaternion.LookRotation(-offset);
+            // ---- Sinematik: zoom, geser fokus, orbit saat game berakhir ----
+            float udt = Time.unscaledDeltaTime;
+            bool ending = GameManager.Instance != null && GameManager.Instance.IsGameOver;
+            float wantZoom = 1f, wantWeight = 0f;
+            if (ending)
+            {
+                wantZoom = 0.5f;
+                orbit += udt * 9f;
+            }
+            else if (Time.unscaledTime < focusUntil)
+            {
+                wantZoom = focusZoom;
+                wantWeight = focusWeight;
+            }
+            zoom = Mathf.Lerp(zoom, wantZoom, 1f - Mathf.Exp(-2.5f * udt));
+            weight = Mathf.Lerp(weight, wantWeight, 1f - Mathf.Exp(-3f * udt));
+
+            Vector3 center = Vector3.Lerp(target.position, focusPoint, weight);
+            Vector3 currentOffset = Quaternion.Euler(0f, orbit, 0f) * offset * zoom;
+            Vector3 desired = center + currentOffset;
+            Quaternion baseRotation = Quaternion.LookRotation(-currentOffset);
 
             if (GameManager.Instance != null && GameManager.Instance.State == GameState.Menu)
             {

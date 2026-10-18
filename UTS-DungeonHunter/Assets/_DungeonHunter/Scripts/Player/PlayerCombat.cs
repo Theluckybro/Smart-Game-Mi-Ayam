@@ -6,7 +6,7 @@ using UnityEngine.InputSystem;
 namespace DungeonHunter
 {
     /// <summary>
-    /// Serangan melee player (Klik Kiri / Space).
+    /// Serangan melee player (Klik Kiri / J).
     /// Mengenai semua target dalam busur di depan player.
     /// Setiap ayunan pedang memancarkan noise.
     /// </summary>
@@ -41,7 +41,7 @@ namespace DungeonHunter
                 return;
 
             bool pressed = (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
-                           || (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame);
+                           || (Keyboard.current != null && Keyboard.current.jKey.wasPressedThisFrame);
 
             if (pressed && Time.time >= nextAttackTime)
             {

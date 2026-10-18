@@ -19,14 +19,21 @@ namespace DungeonHunter.EditorTools
     ///
     /// Legenda peta (1 karakter = 1 sel 2x2 meter):
     ///   #  dinding        .  lantai          P  spawn player
-    ///   M  melee enemy    R  ranged enemy    G  guardian
-    ///   K  dungeon key    D  pintu guardian  A  artifact
+    ///   M  melee enemy    R  crossbowman     Q  mage          G  guardian
+    ///   K  dungeon key    D  pintu guardian  A  artifact      H  health potion
     ///   w  waypoint       S  retreat point   L  obor / point light
-    ///   T  jebakan duri (NavMesh area "Trap", cost tinggi)
-    ///   g  gerbang besi (dynamic obstacle, menutup saat Key diambil)
+    ///   T  jebakan duri (NavMesh area "Trap", cost tinggi; setiap kelompok sel = 1 jebakan)
+    ///   g  gerbang Treasury  (tertutup → dibuka tuas V → terbanting lagi saat Key diambil)
+    ///   j  gerbang jalan pintas Katakombe → Entrance (dibuka tuas v)
+    ///   V  tuas Armory     v  tuas Katakombe
+    ///
+    /// Ruangan & fungsinya:
+    ///   Entrance (spawn) → Great Hall (pusat, patroli + jebakan) → Armory (barat: balkon, tuas V)
+    ///   → Treasury (timur: Key, gerbang menutup di belakang player) → Katakombe (tenggara: dua lorong,
+    ///   jebakan vs jalan memutar, penyergapan, tuas v) → jalan pintas ke Entrance → Vestibule → Sanctum Guardian.
     ///
     /// Struktur tambahan (didefinisikan lewat konstanta, bukan karakter peta):
-    ///   Balkon setinggi 1.4 m di ruang barat + ramp naik + NavMeshLink untuk lompat turun.
+    ///   Balkon setinggi 1.4 m di Armory + ramp naik + NavMeshLink untuk lompat turun.
     ///
     /// Visual memakai aset KayKit (CC0) di Assets/_DungeonHunter/ThirdParty/KayKit.
     /// Collider & NavMesh tetap memakai geometri sederhana (kubus) agar navigasi stabil.
@@ -40,9 +47,9 @@ namespace DungeonHunter.EditorTools
         // Fasad didorong sedikit ke arah lantai supaya tidak sebidang dengan fasad lain di sudut luar
         private const float FacadeOffset = 0.015f;
 
-        // Balkon ruang barat (baris 9–11, kolom 1–5) + ramp (baris 9–10, kolom 6–7, naik ke arah barat)
-        private const int BalconyRowMin = 9, BalconyRowMax = 11, BalconyColMin = 1, BalconyColMax = 5;
-        private const int RampRowMin = 9, RampRowMax = 10, RampColMin = 6, RampColMax = 7;
+        // Balkon Armory (baris 11–14, kolom 1–4) + ramp (baris 11–12, kolom 5–6, naik ke arah barat)
+        private const int BalconyRowMin = 11, BalconyRowMax = 14, BalconyColMin = 1, BalconyColMax = 4;
+        private const int RampRowMin = 11, RampRowMax = 12, RampColMin = 5, RampColMax = 6;
         private const float BalconyHeight = 1.4f;
 
         private const string Root = "Assets/_DungeonHunter";
@@ -52,56 +59,87 @@ namespace DungeonHunter.EditorTools
 
         private static readonly string[] Map =
         {
-            "################################",
-            "##########............##########",
-            "##########.L........L.##########",
-            "##########.....A......##########",
-            "##########............##########",
-            "##########.....G......##########",
-            "##########.L........L.##########",
-            "###############DD###############",
-            "###############..###############",
-            "#S......##............##.......#",
-            "#.R.L...##.w..L....w..##...L.R.#",
-            "#.......##...#....#...##.......#",
-            "#.............TTTT....gg..#....#",
-            "#.............TTTT....gg..#..K.#",
-            "#.......##...#....#...##.......#",
-            "#.......##.w..M...Mw..##......S#",
-            "#.......##............##.......#",
-            "###########..##############..###",
-            "###########.........S...L....###",
-            "########........################",
-            "########......L.################",
-            "########...P....################",
-            "########........################",
-            "########........################",
-            "################################",
+            "########################################",
+            "#############L............L#############",
+            "#############......A.......#############",
+            "#############...#......#...#############",
+            "#############..............#############",
+            "#############......G.......#############",
+            "#############...#......#...#############",
+            "#############H.............#############",
+            "#############.............L#############",
+            "###################DD###################",
+            "################H......L################",
+            "#V........########....########L........#",
+            "#.........##L..............L##.......K.#",
+            "#..R......##.w...M........w.##.........#",
+            "#........L##...#........#...##.........#",
+            "#.........##......TTTT......gg....#....#",
+            "#.w.....w....S....TTTT....S.gg.........#",
+            "#.................TTTT......##.....Q...#",
+            "#.........##...#........#...##........S#",
+            "#.....M...##.w........M...w.##L........#",
+            "#.w.....w.##L..............L########..##",
+            "#S.......L#########..###############..##",
+            "###################..###############..##",
+            "#############L.........L######..TTT..L##",
+            "#############...........######S.TTT.w.##",
+            "#############...........##v.....####..##",
+            "#############....P......jj.w..........##",
+            "#############...........jj...M......w.##",
+            "#############..........L##L....H########",
+            "########################################",
         };
 
         // Props dekorasi: (model, baris, kolom, ukuran horizontal terpanjang, rotasi Y)
         private static readonly (string model, int row, int col, float size, float yaw)[] Props =
         {
-            ("barrel_large", 16, 1, 1.3f, 0f),
-            ("barrel_small_stack", 16, 2, 1.3f, 30f),
-            ("crates_stacked", 9, 24, 1.7f, 0f),
-            ("box_stacked", 16, 24, 1.5f, 90f),
-            ("keg", 19, 8, 1.3f, 90f),
-            ("table_medium_decorated_A", 23, 14, 1.8f, 0f),
-            ("chest_gold", 1, 20, 1.5f, 180f),
-            ("chest", 1, 11, 1.5f, 180f),
-            ("rubble_half", 4, 21, 1.6f, 0f),
+            // Sanctum
+            ("rubble_large", 1, 21, 1.8f, 0f),
+            ("rubble_half", 8, 15, 1.6f, 40f),
+            ("candle_triple", 2, 16, 0.8f, 0f),
+            ("candle_triple", 2, 23, 0.8f, 0f),
+            // Great Hall
+            ("barrel_large", 20, 14, 1.3f, 0f),
+            ("crates_stacked", 12, 25, 1.7f, 0f),
+            ("table_medium_decorated_A", 20, 25, 1.8f, 0f),
+            // Armory
+            ("box_stacked", 12, 1, 1.4f, 0f),
+            ("crates_stacked", 21, 4, 1.7f, 0f),
+            ("box_large", 18, 1, 1.5f, 90f),
+            ("barrel_large", 21, 7, 1.3f, 0f),
+            // Treasury
+            ("chest_gold", 11, 37, 1.5f, 180f),
+            ("chest", 11, 33, 1.5f, 180f),
+            ("coin_stack_large", 12, 38, 0.9f, 0f),
+            ("coin_stack_large", 11, 35, 0.9f, 60f),
+            ("trunk_large_A", 14, 31, 1.8f, 90f),
+            ("keg", 19, 32, 1.3f, 90f),
+            // Katakombe
+            ("trunk_large_B", 25, 29, 1.8f, 0f),
+            ("trunk_large_B", 28, 28, 1.8f, 0f),
+            ("rubble_half", 27, 37, 1.4f, 0f),
+            // Entrance
+            ("table_medium_decorated_A", 28, 15, 1.8f, 0f),
+            ("bed_floor", 24, 21, 2f, 90f),
+            ("keg", 28, 20, 1.3f, 90f),
+            ("box_stacked", 25, 13, 1.4f, 90f),
         };
 
         // Dekorasi dinding: (model, baris dinding, kolom dinding, baris lantai, kolom lantai)
         private static readonly (string model, int wr, int wc, int fr, int fc)[] WallDecor =
         {
-            ("banner_red", 8, 12, 9, 12),
-            ("banner_red", 8, 19, 9, 19),
-            ("banner_shield_red", 0, 13, 1, 13),
-            ("banner_shield_red", 0, 18, 1, 18),
-            ("sword_shield", 0, 15, 1, 15),
-            ("banner_patternA_red", 24, 9, 23, 9),
+            ("banner_shield_red", 0, 15, 1, 15),
+            ("sword_shield_gold", 0, 19, 1, 19),
+            ("banner_shield_red", 0, 24, 1, 24),
+            ("banner_red", 9, 17, 10, 17),
+            ("banner_red", 9, 22, 10, 22),
+            ("banner_patternA_red", 11, 14, 12, 14),
+            ("banner_patternA_red", 11, 25, 12, 25),
+            ("sword_shield", 17, 0, 17, 1),
+            ("sword_shield_broken", 19, 0, 19, 1),
+            ("banner_shield_red", 10, 34, 11, 34),
+            ("banner_red", 29, 18, 28, 18),
         };
 
         private static readonly Dictionary<string, Material> Materials = new Dictionary<string, Material>();
@@ -188,6 +226,7 @@ namespace DungeonHunter.EditorTools
             SetField(vfx, "telegraph", VFXAssets.Telegraph);
             SetField(vfx, "debris", VFXAssets.Debris);
             SetField(vfx, "line", VFXAssets.Line);
+            SetField(vfx, "solid", VFXAssets.Solid);
 
             CreateCamera(player.transform);
 
@@ -196,36 +235,56 @@ namespace DungeonHunter.EditorTools
             Projectile magicProjectile = CreateMagicProjectilePrefab();
             Projectile arrowProjectile = CreateArrowProjectilePrefab();
 
+            // Setiap waypoint menjadi milik melee terdekat → satu rute patroli per ruangan
+            List<Vector3> meleeSpawns = CellsOf('M').ToList();
             int meleeIndex = 0;
-            foreach (Vector3 p in CellsOf('M'))
+            foreach (Vector3 p in meleeSpawns)
             {
                 var e = CreateMelee(enemies, p, meleeIndex + 1);
-                List<Transform> route = OrderLoop(waypoints.Where(w => Vector3.Distance(w.position, p) < 18f).ToList());
+                List<Transform> route = OrderLoop(waypoints
+                    .Where(w => meleeSpawns.OrderBy(m => Vector3.Distance(m, w.position)).First() == p).ToList());
                 e.Setup($"Skeleton Warrior {meleeIndex + 1}", player.transform, route, retreats);
-                e.SetStartWaypoint(meleeIndex * 2 % Mathf.Max(1, route.Count));
+                e.SetStartWaypoint(meleeIndex % Mathf.Max(1, route.Count));
                 meleeIndex++;
             }
 
             int rangedIndex = 0;
             foreach (Vector3 p in CellsOf('R'))
             {
-                bool crossbow = rangedIndex == 0;
-                var e = CreateRanged(enemies, p, rangedIndex + 1, crossbow, crossbow ? arrowProjectile : magicProjectile);
-                e.Setup(crossbow ? "Skeleton Crossbowman" : "Skeleton Mage", player.transform, new List<Transform>(), retreats);
-                rangedIndex++;
+                var e = CreateRanged(enemies, p, ++rangedIndex, true, arrowProjectile);
+                e.Setup("Skeleton Crossbowman", player.transform, new List<Transform>(), retreats);
+            }
+            foreach (Vector3 p in CellsOf('Q'))
+            {
+                var e = CreateRanged(enemies, p, ++rangedIndex, false, magicProjectile);
+                e.Setup("Skeleton Mage", player.transform, new List<Transform>(), retreats);
             }
 
             foreach (Vector3 p in CellsOf('G'))
             {
                 var g = CreateGuardian(enemies, p);
                 g.Setup("Crypt Guardian", player.transform, new List<Transform>(), new List<Transform>());
+                SetField(g, "minionPrefab", CreateMinionPrefab());
             }
 
             // ---------- OBJECTIVES ----------
             CreateKey(CellsOf('K').First());
             CreateDoor(Centroid(CellsOf('D')));
             CreateArtifact(CellsOf('A').First());
-            CreatePortcullis(Centroid(CellsOf('g')));
+            Portcullis treasuryGate = CreatePortcullis('g', "TreasuryGate", true);
+            Portcullis shortcutGate = CreatePortcullis('j', "ShortcutGate", false);
+            CreateLever(CellsOf('V').First(), "Lever_Armory", 0, treasuryGate);
+            CreateLever(CellsOf('v').First(), "Lever_Catacombs", 1, shortcutGate);
+            foreach (Vector3 p in CellsOf('H'))
+                CreatePotion(p);
+
+            // ---------- POST-PROCESSING ----------
+            var post = new GameObject("PostFX");
+            var volume = post.AddComponent<UnityEngine.Rendering.Volume>();
+            volume.isGlobal = true;
+            volume.priority = 10f;
+            volume.sharedProfile = PostFXAssets.Create();
+            post.AddComponent<PostFXController>();
 
             // ---------- SAVE ----------
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -425,15 +484,35 @@ namespace DungeonHunter.EditorTools
             }
         }
 
-        /// <summary>Gabungkan sel 'T' menjadi satu persegi panjang (x, z).</summary>
+        /// <summary>Kelompokkan sel 'T' yang bersebelahan (flood fill); setiap kelompok = satu persegi panjang (x, z).</summary>
         private static IEnumerable<Rect> TrapRects()
         {
-            List<Vector3> cells = CellsOf('T').ToList();
-            if (cells.Count == 0)
-                yield break;
-            float minX = cells.Min(c => c.x) - Cell * 0.5f, maxX = cells.Max(c => c.x) + Cell * 0.5f;
-            float minZ = cells.Min(c => c.z) - Cell * 0.5f, maxZ = cells.Max(c => c.z) + Cell * 0.5f;
-            yield return Rect.MinMaxRect(minX, minZ, maxX, maxZ);
+            var seen = new HashSet<(int, int)>();
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Cols; c++)
+                {
+                    if (Map[r][c] != 'T' || seen.Contains((r, c)))
+                        continue;
+                    var group = new List<(int r, int c)>();
+                    var stack = new Stack<(int, int)>();
+                    stack.Push((r, c));
+                    seen.Add((r, c));
+                    while (stack.Count > 0)
+                    {
+                        var (cr, cc) = stack.Pop();
+                        group.Add((cr, cc));
+                        foreach (var (dr, dc) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
+                        {
+                            int nr = cr + dr, nc = cc + dc;
+                            if (nr >= 0 && nr < Rows && nc >= 0 && nc < Cols && Map[nr][nc] == 'T' && seen.Add((nr, nc)))
+                                stack.Push((nr, nc));
+                        }
+                    }
+                    List<Vector3> cells = group.Select(g => CellToWorld(g.r, g.c)).ToList();
+                    float minX = cells.Min(p => p.x) - Cell * 0.5f, maxX = cells.Max(p => p.x) + Cell * 0.5f;
+                    float minZ = cells.Min(p => p.z) - Cell * 0.5f, maxZ = cells.Max(p => p.z) + Cell * 0.5f;
+                    yield return Rect.MinMaxRect(minX, minZ, maxX, maxZ);
+                }
         }
 
         /// <summary>
@@ -706,6 +785,7 @@ namespace DungeonHunter.EditorTools
             player.AddComponent<PlayerController>();
             player.AddComponent<PlayerCombat>();
             AddFootsteps(player, Sfx.PlayerStep, 1.9f, 1f, 5f);
+            player.AddComponent<ObjectivePointer>();
             return player;
         }
 
@@ -718,8 +798,17 @@ namespace DungeonHunter.EditorTools
             cam.fieldOfView = 50f;
             // AudioListener tidak di kamera: AudioManager membuat listener yang mengikuti player
 
+            // Post-processing URP aktif + anti-aliasing SMAA
+            var camData = camGo.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+            camData.renderPostProcessing = true;
+            camData.antialiasing = UnityEngine.Rendering.Universal.AntialiasingMode.SubpixelMorphologicalAntiAliasing;
+            camData.antialiasingQuality = UnityEngine.Rendering.Universal.AntialiasingQuality.High;
+
             var follow = camGo.AddComponent<TopDownCamera>();
             follow.SetTarget(player);
+            SetField(follow, "menuCenter", new Vector3((Cols - 1) * Cell * 0.5f, 0f, (Rows - 1) * Cell * 0.5f));
+            SetField(follow, "menuRadius", Cols * Cell * 0.42f);
+            SetField(follow, "menuHeight", Cols * Cell * 0.42f);
             Vector3 offset = new Vector3(0f, 16f, -9f);
             camGo.transform.position = player.position + offset;
             camGo.transform.rotation = Quaternion.LookRotation(-offset);
@@ -801,16 +890,43 @@ namespace DungeonHunter.EditorTools
             return e;
         }
 
+        /// <summary>
+        /// Prefab Skeleton Minion untuk Phase 2 Guardian: kecil, cepat, rapuh (HP 25), tidak kabur (Flee off).
+        /// Di-Instantiate saat runtime oleh GuardianEnemy.
+        /// </summary>
+        private static MeleeEnemy CreateMinionPrefab()
+        {
+            var e = CreateEnemyBase<MeleeEnemy>(null, "Skeleton_Minion", Vector3.zero, 0.38f, 1.6f, 25f, new KK.CharacterSpec
+            {
+                Model = "Skeleton_Minion", Material = "Skeleton", Controller = "SkeletonMelee", Height = 1.55f,
+                RightWeapon = "Skeleton_Blade", RightWeaponSize = 0.5f
+            });
+            e.GetComponent<AIPerception>().Configure(14f, 160f);
+            SetField(e, "canFlee", false);
+            SetField(e, "chaseSpeed", 4.6f);
+            SetField(e, "attackDamage", 8f);
+            SetField(e, "attackCooldown", 1.4f);
+            SetField(e, "alertHeight", 2.1f);
+            AddDamageFeedback(e.gameObject, false, false, BoneSpark, BoneDebris, 7f, 0.9f);
+            AddFootsteps(e.gameObject, Sfx.SkeletonStep, 1.1f, 0.8f, 3.5f);
+
+            string path = PrefabDir + "/Skeleton_Minion.prefab";
+            GameObject prefab = PrefabUtility.SaveAsPrefabAsset(e.gameObject, path);
+            Object.DestroyImmediate(e.gameObject);
+            return prefab.GetComponent<MeleeEnemy>();
+        }
+
         private static GuardianEnemy CreateGuardian(Transform parent, Vector3 pos)
         {
-            var g = CreateEnemyBase<GuardianEnemy>(parent, "Guardian", pos, 0.8f, 3f, 300f, new KK.CharacterSpec
+            var g = CreateEnemyBase<GuardianEnemy>(parent, "Guardian", pos, 0.8f, 3f, 400f, new KK.CharacterSpec
             {
                 Model = "Skeleton_Warrior", Material = "SkeletonGuardian", Controller = "Guardian", Height = 3.1f,
                 RightWeapon = "Skeleton_Axe", RightWeaponSize = 0.62f,
                 LeftWeapon = "Skeleton_Shield_Large_B", LeftWeaponSize = 0.45f,
                 ReactToHits = false
             });
-            g.GetComponent<AIPerception>().Configure(11f, 150f);
+            // boss mengawasi seluruh arena (28×16 m); pilar tetap memblokir line of sight
+            g.GetComponent<AIPerception>().Configure(20f, 200f);
             SetField(g, "chaseSpeed", 3.2f);
             SetField(g, "patrolSpeed", 1.8f);
             SetField(g, "trapAreaCost", 1f);
@@ -947,6 +1063,37 @@ namespace DungeonHunter.EditorTools
             SetField(sparkles, "radius", 0.6f);
         }
 
+        /// <summary>Health potion: botol KayKit berwarna merah, cahaya merah, kilau, melayang & berputar.</summary>
+        private static void CreatePotion(Vector3 pos)
+        {
+            var potion = new GameObject("HealthPotion");
+            potion.transform.position = pos;
+            var visual = new GameObject("Visual").transform;
+            visual.SetParent(potion.transform, false);
+            visual.localPosition = new Vector3(0f, 0.8f, 0f);
+            GameObject model = KK.Spawn(KK.DungeonPath("bottle_A_brown"), visual, "Potion");
+            Bounds b = KK.RendererBounds(model);
+            model.transform.localScale *= 1.05f / Mathf.Max(0.01f, Mathf.Max(b.size.x, Mathf.Max(b.size.y, b.size.z)));
+            b = KK.RendererBounds(model);
+            model.transform.position -= b.center - visual.position;
+
+            var light = potion.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.3f, 0.35f);
+            light.range = 4f;
+            light.intensity = 2.6f;
+
+            var pickup = potion.AddComponent<HealthPotion>();
+            SetField(pickup, "visual", visual);
+            SetField(pickup, "interactRadius", 1.3f);
+            SetField(pickup, "spinSpeed", 60f);
+
+            var sparkles = potion.AddComponent<AmbientSparkles>();
+            SetField(sparkles, "color", new Color(1f, 0.35f, 0.4f));
+            SetField(sparkles, "height", 0.8f);
+            SetField(sparkles, "radius", 0.45f);
+        }
+
         /// <summary>
         /// Panel bergerak = transform kosong berisi "Blocker" (kubus collider + NavMeshObstacle, tidak dirender)
         /// dan model gerbang KayKit.
@@ -1020,15 +1167,74 @@ namespace DungeonHunter.EditorTools
             SetField(sparkles, "rate", 16f);
         }
 
-        /// <summary>Gerbang besi antara hall dan ruang timur (dynamic obstacle, menutup saat Key diambil).</summary>
-        private static void CreatePortcullis(Vector3 pos)
+        /// <summary>
+        /// Gerbang besi (dynamic obstacle) dari sekelompok sel peta. Orientasi otomatis:
+        /// ada dinding di utara gerbang → lorong timur-barat → panel melintang utara-selatan.
+        /// </summary>
+        private static Portcullis CreatePortcullis(char cell, string objName, bool closeOnKey)
         {
-            var gate = new GameObject("Portcullis");
-            gate.transform.position = pos;
-            Transform panel = CreateGatePanel(gate.transform, new Vector3(0.5f, WallHeight, Cell * 2f), 90f);
+            List<(int r, int c)> cells = new List<(int, int)>();
+            for (int r = 0; r < Rows; r++)
+                for (int c = 0; c < Cols; c++)
+                    if (Map[r][c] == cell)
+                        cells.Add((r, c));
+            int rMin = cells.Min(x => x.r), rMax = cells.Max(x => x.r);
+            int cMin = cells.Min(x => x.c), cMax = cells.Max(x => x.c);
+            bool eastWest = IsWall(rMin - 1, cMin);
+
+            var gate = new GameObject(objName);
+            gate.transform.position = Centroid(cells.Select(x => CellToWorld(x.r, x.c)));
+            Transform panel = eastWest
+                ? CreateGatePanel(gate.transform, new Vector3(0.5f, WallHeight, (rMax - rMin + 1) * Cell), 90f)
+                : CreateGatePanel(gate.transform, new Vector3((cMax - cMin + 1) * Cell, WallHeight, 0.5f), 0f);
 
             var portcullis = gate.AddComponent<Portcullis>();
             SetField(portcullis, "gatePanel", panel);
+            SetField(portcullis, "startClosed", true);
+            SetField(portcullis, "closeOnKey", closeOnKey);
+            return portcullis;
+        }
+
+        /// <summary>Tuas: alas batu + gagang kayu yang berayun + lampu indikator (kuning → hijau saat ditarik).</summary>
+        private static void CreateLever(Vector3 pos, string objName, int index, Portcullis gate)
+        {
+            var lever = new GameObject(objName);
+            lever.transform.position = pos;
+
+            CreateVisual(PrimitiveType.Cube, lever.transform, new Vector3(0f, 0.25f, 0f), new Vector3(0.9f, 0.5f, 0.6f), "WallTop");
+            CreateVisual(PrimitiveType.Cube, lever.transform, new Vector3(0f, 0.52f, 0f), new Vector3(0.7f, 0.06f, 0.4f), "Balcony");
+            var pivot = new GameObject("Handle").transform;
+            pivot.SetParent(lever.transform, false);
+            pivot.localPosition = new Vector3(0f, 0.55f, 0f);
+            pivot.localRotation = Quaternion.Euler(-40f, 0f, 0f);
+            CreateVisual(PrimitiveType.Cylinder, pivot, new Vector3(0f, 0.45f, 0f), new Vector3(0.1f, 0.45f, 0.1f), "Wood");
+            CreateVisual(PrimitiveType.Sphere, pivot, new Vector3(0f, 0.92f, 0f), Vector3.one * 0.22f, "Flame");
+
+            var col = lever.AddComponent<BoxCollider>();
+            col.center = new Vector3(0f, 0.25f, 0f);
+            col.size = new Vector3(0.9f, 0.5f, 0.6f);
+
+            var lampGo = new GameObject("Lamp");
+            lampGo.transform.SetParent(lever.transform, false);
+            lampGo.transform.localPosition = new Vector3(0f, 1.6f, 0f);
+            var lamp = lampGo.AddComponent<Light>();
+            lamp.type = LightType.Point;
+            lamp.range = 4f;
+            lamp.intensity = 2.5f;
+
+            var l = lever.AddComponent<Lever>();
+            SetField(l, "gate", gate);
+            SetField(l, "leverIndex", index);
+            SetField(l, "handle", pivot);
+            SetField(l, "lamp", lamp);
+            SetField(l, "interactRadius", 1.6f);
+            SetField(l, "bobAmplitude", 0f);
+            SetField(l, "spinSpeed", 0f);
+
+            var sparkles = lever.AddComponent<AmbientSparkles>();
+            SetField(sparkles, "color", new Color(1f, 0.8f, 0.3f));
+            SetField(sparkles, "height", 1.2f);
+            SetField(sparkles, "radius", 0.6f);
         }
 
         // =====================================================
@@ -1116,6 +1322,7 @@ namespace DungeonHunter.EditorTools
                 case bool b: prop.boolValue = b; break;
                 case Object o: prop.objectReferenceValue = o; break;
                 case Color col: prop.colorValue = col; break;
+                case Vector3 v: prop.vector3Value = v; break;
                 default: throw new ArgumentException($"Tipe {value?.GetType()} belum didukung");
             }
 

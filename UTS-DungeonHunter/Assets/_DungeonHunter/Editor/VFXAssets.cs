@@ -19,6 +19,7 @@ namespace DungeonHunter.EditorTools
         public static Material Debris { get; private set; }
         public static Material Trail { get; private set; }
         public static Material Line { get; private set; }
+        public static Material Solid { get; private set; }
 
         public static void Create()
         {
@@ -65,6 +66,10 @@ namespace DungeonHunter.EditorTools
             Telegraph = ParticleMaterial("VFX_Telegraph", disc, false);
             Trail = ParticleMaterial("VFX_Trail", strip, true);
             Line = ParticleMaterial("VFX_Line", edgeStrip, false);
+
+            // Putih penuh: untuk mesh (bayangan dodge, panah penunjuk objective)
+            Texture2D white = MakeTexture("VFX_White", 8, (x, y) => 1f);
+            Solid = ParticleMaterial("VFX_Solid", white, true);
 
             string debrisPath = Dir + "/VFX_Debris.mat";
             Debris = AssetDatabase.LoadAssetAtPath<Material>(debrisPath);

@@ -13,7 +13,7 @@ mengalahkan **Crypt Guardian**, lalu mengambil **Ancient Artifact**.
 > |---|---|
 > | ✅ Melee AI | ✅ Flee / Retreat |
 > | ✅ Ranged AI | ✅ Navigation (Area Cost, NavMeshLink, Dynamic Obstacle, Partial Path) |
-> | ✅ Maintain Distance | ✅ Guardian Behavior (Behavior Tree, Phase 2) |
+> | ✅ Maintain Distance | ✅ Guardian Behavior (Behavior Tree, 3 Phase + minion) |
 
 ![Overview dungeon](Docs/images/screenshot_overview.png)
 
@@ -39,7 +39,8 @@ mengalahkan **Crypt Guardian**, lalu mengambil **Ancient Artifact**.
 |---|---|
 | WASD | Bergerak |
 | Mouse | Arah hadap |
-| Klik kiri / Space | Serang (pedang) |
+| Klik kiri / J | Serang (pedang) |
+| **Space / Klik kanan** | **Dodge** — menerjang cepat, kebal sesaat (i-frame) |
 | Shift | Sprint (lebih berisik → terdengar enemy) |
 | **F1** | **AI Debug Mode** |
 | Esc | Pause / lanjutkan (volume Musik & Efek diatur di menu Pause) |
@@ -49,9 +50,23 @@ mengalahkan **Crypt Guardian**, lalu mengambil **Ancient Artifact**.
 
 ![Alur gameplay](Docs/images/alur_gameplay.png)
 
-## Peta navigasi
+## Peta & ruangan
 
 ![Peta navigasi](Docs/images/peta_navigasi.png)
+
+Setiap ruangan wajib dilewati — progres dikunci oleh tuas, gerbang, dan Key:
+
+| Ruangan | Fungsi |
+|---|---|
+| **Entrance** (selatan) | Spawn player. Tersambung ke Great Hall; gerbang di sisi timur (jalan pintas Katakombe) tertutup di awal |
+| **Great Hall** (pusat) | Persimpangan semua sayap. 2 Skeleton Warrior berpatroli, jebakan duri di tengah, 4 pilar penghalang pandangan |
+| **Armory** (barat) | **Tuas 1** ada di atas balkon 1.4 m (naik lewat ramp), dijaga Crossbowman di balkon dan Warrior di bawah. Menarik tuas membuka gerbang Treasury dan berisik → musuh datang memeriksa |
+| **Treasury** (timur) | **Dungeon Key** dijaga Skeleton Mage. Begitu Key diambil, gerbang **terbanting menutup** → jalan pulang terputus |
+| **Katakombe** (tenggara) | Satu-satunya jalan keluar dari Treasury. Dua lorong: atas pendek tapi berjebakan, bawah memutar tapi aman. Warrior menyergap di crypt; **Tuas 2** membuka jalan pintas ke Entrance |
+| **Vestibule** | Ruang kecil sebelum pintu Sanctum, ada Health Potion |
+| **Sanctum Guardian** (utara) | Arena Crypt Guardian dengan 4 pilar — berguna untuk berlindung dari Charge. Artifact di ujung utara |
+
+![Peta dari atas](Docs/images/screenshot_map_topdown.png)
 
 ## Arsitektur AI
 
@@ -74,7 +89,7 @@ Perception ──► Memory ──► Decision (FSM / Behavior Tree) ──► N
 |---|---|---|
 | **Skeleton Warrior** (Melee AI) | 2 | Patroli waypoint → Chase → Attack (windup, bisa dihindari). Kehilangan player → ke Last Known Position → Search → Patrol. HP ≤ 30% → Flee |
 | **Skeleton Crossbowman & Skeleton Mage** (Ranged AI) | 2 | Berjaga & look-around → **Maintain Distance** 5–9 m (mendekat / menembak / mundur). Crossbowman berjaga di **balkon**. HP ≤ 30% → Flee |
-| **Crypt Guardian** (Guardian Behavior) | 1 | **Behavior Tree**: jaga pos, kejar di dalam arena (leash 10 m), Ground Slam, Phase 2 (HP ≤ 50%: lebih cepat + Charge), kembali ke pos + regen jika player kabur |
+| **Crypt Guardian** (Guardian Behavior) | 1 | **Behavior Tree**: jaga pos, kejar di dalam arena (leash 10 m), HP 400, 3 phase & 5 skill: Ground Slam, **Summon Minion** (saat player kiting / minion berkurang), **Bone Eruption** (duri di posisi + prediksi player), **Triple Slam**, Charge; kembali ke pos + regen jika player kabur |
 
 ### FSM Melee
 
@@ -88,13 +103,17 @@ Perception ──► Memory ──► Decision (FSM / Behavior Tree) ──► N
 
 ![Behavior Tree Guardian](Docs/images/bt_guardian.png)
 
+| Summon minion | Bone Eruption (duri di posisi + prediksi player) |
+|---|---|
+| ![Summon](Docs/images/screenshot_summon.png) | ![Bone Eruption](Docs/images/screenshot_bone_eruption.png) |
+
 ## Navigation
 
 | Fitur | Perilaku di game |
 |---|---|
-| **Area Cost** | Lantai jebakan duri di tengah hall = area NavMesh `Trap` (cost 5; archer 8; guardian 1). Enemy memilih jalan memutar (path 18 m → 23 m). Duri melukai siapa pun, jadi player bisa memancing enemy |
-| **NavMeshLink** | Balkon 1.4 m di ruang barat (naik lewat ramp). Link satu arah untuk lompat turun; enemy melompat dengan lintasan parabola |
-| **Dynamic obstacle** | Gerbang besi menutup saat Key diambil (`NavMeshObstacle` carve). Semua enemy otomatis repath lewat koridor selatan (path 19 m → 60 m) |
+| **Area Cost** | Lantai jebakan duri (Great Hall & lorong atas Katakombe) = area NavMesh `Trap` (cost 5; archer 8; guardian 1). Di Katakombe enemy memilih lorong bawah yang memutar (±19 m) daripada lorong atas berjebakan. Duri melukai siapa pun, jadi player bisa memancing enemy |
+| **NavMeshLink** | Balkon 1.4 m di Armory (naik lewat ramp). Link satu arah untuk lompat turun; enemy melompat dengan lintasan parabola |
+| **Dynamic obstacle** | Dua gerbang besi (`NavMeshObstacle` carve). Gerbang Treasury: tertutup → dibuka tuas Armory (path Entrance→Key berubah dari *Partial* menjadi *Complete* 51 m) → terbanting lagi saat Key diambil. Gerbang jalan pintas dibuka tuas Katakombe. Setiap perubahan → semua enemy repath |
 | **Partial path** | Tujuan tidak bisa dicapai (mis. di balik pintu terkunci) → enemy ke titik terdekat, menunggu, lalu mencari |
 | **Panjang path** | Flee memilih retreat point yang lebih dulu dicapai enemy daripada player (bukan jarak garis lurus) |
 
@@ -115,12 +134,12 @@ Retreat Point, dan status gerbang besi.
 2. **Memory** — terlihat Warrior → CHASE, sembunyi di balik pilar → INVESTIGATE ke LKP → SEARCH → PATROL.
 3. **Hearing** — sprint di dekat enemy yang membelakangi → INVESTIGATE "Mendengar suara".
 4. **Melee AI** — dekati Warrior → ATTACK (windup kuning) lalu menghindar.
-5. **Ranged AI + Maintain Distance** — dekati Archer → REPOSITION, jauhi → CHASE, jarak ideal → ATTACK.
+5. **Ranged AI + Maintain Distance** — dekati Crossbowman / Mage → REPOSITION, jauhi → CHASE, jarak ideal → ATTACK.
 6. **Area Cost** — berdiri di seberang jebakan, path cyan Warrior memutar menghindari kotak merah.
-7. **NavMeshLink** — naik ramp ke balkon, turun, biarkan Warrior mengejar → `Nav : LOMPAT via NavMeshLink`.
-8. **Dynamic obstacle** — ambil Key → gerbang menutup → path enemy berubah lewat koridor selatan.
+7. **NavMeshLink** — naik ramp ke balkon Armory (tuas), turun, biarkan Warrior mengejar → `Nav : LOMPAT via NavMeshLink`.
+8. **Dynamic obstacle** — tarik tuas → gerbang Treasury terbuka, ambil Key → gerbang menutup → path enemy berubah; di Katakombe enemy memilih lorong bawah (Area Cost).
 9. **Flee** — pukul Warrior sampai HP ≤ 30% → FLEE ke Retreat Point (garis hijau), regen, kembali.
-10. **Guardian** — masuk arena → Kejar/Slam, turunkan HP ≤ 50% → Enrage → Charge, keluar arena → Return + regen.
+10. **Guardian** — jaga jarak > 8 m → `Root > Summon` (minion memotong jalan), HP ≤ 66% → gelombang 3 minion + **Bone Eruption** (jangan bergerak lurus, dodge / berlindung di balik pilar), HP ≤ 33% → Enrage → Triple Slam & Charge, keluar arena → Return + regen.
 11. **Win / Lose** — kalahkan Guardian → ambil Artifact / biarkan HP habis.
 
 ## Progress
@@ -136,8 +155,11 @@ Retreat Point, dan status gerbang besi.
 **Progress 2**
 - [x] **Flee / Retreat** — retreat point berbasis panjang path, regen, terpojok → melawan
 - [x] **Navigation** — Area Cost, NavMeshLink, dynamic obstacle + repath, partial path
-- [x] **Guardian Behavior** — Behavior Tree, leash, Ground Slam, Phase 2 (Enrage + Charge)
-- [x] Objective lengkap: Key → pintu → Guardian → Artifact
+- [x] **Guardian Behavior** — Behavior Tree 3 phase, 5 skill: Slam, Summon Minion (reaksi terhadap kiting), Bone Eruption (prediksi gerak player), Triple Slam, Charge; leash
+- [x] Objective lengkap (5 langkah): tuas Armory → Key → kabur lewat Katakombe → Guardian → Artifact
+
+**Level design**
+- [x] Peta 7 ruangan yang saling terkunci: tuas Armory → Key Treasury (gerbang terbanting) → Katakombe (tuas jalan pintas) → Sanctum
 
 **Aset & animasi**
 - [x] Karakter KayKit (Knight + 4 skeleton) dengan senjata di slot tangan
@@ -156,10 +178,18 @@ Retreat Point, dan status gerbang besi.
 
 **Audio**
 - [x] ±50 efek suara (Kenney CC0) dengan variasi klip + pitch acak, suara 3D yang didengar dari posisi player
-- [x] **Musik adaptif** yang membaca state AI: Explore → Tension → Combat → Boss → Boss Phase 2
+- [x] **Musik adaptif** yang membaca state AI: Explore → Tension → Combat → Boss → Boss Phase 2 → Boss Phase 3
 - [x] Ambience obor & tetesan air, musik teredam saat Pause / slow-motion, slider volume
 
-**Sisa (polish)**
+**Polish & game feel**
+- [x] Post-processing URP: Bloom, ACES, color grading, vignette, film grain + efek dinamis (hit, HP kritis, pause blur, menang/kalah)
+- [x] Transisi fade hitam saat restart / kembali ke menu
+- [x] Dodge dengan i-frame, bayangan *afterimage*, dan feedback **DODGE!** / **PERFECT DODGE!**
+- [x] Health Potion (3 buah) di peta
+- [x] Panah penunjuk objective yang mengikuti **jalur NavMesh**
+- [x] Kamera sinematik: intro Guardian, Enrage, Guardian kalah, orbit di layar akhir (+ letterbox)
+
+**Sisa**
 - [ ] Video demo
 
 ## VFX
@@ -181,6 +211,25 @@ Semua VFX dibuat prosedural lewat kode (tanpa aset tambahan). Tekstur partikel d
 | Kematian | Pecahan tulang memantul di lantai + asap; Guardian: cincin besar + slow-motion |
 | Regen (Flee / Return) | Partikel hijau naik |
 | Level | Obor berkedip + bara, debu sprint / mendarat / jebakan / gerbang, kilau Key & Artifact, ledakan pickup |
+
+## Polish & game feel
+
+| Penunjuk objective (jalur NavMesh) | Dodge + afterimage |
+|---|---|
+| ![Pointer](Docs/images/screenshot_ui_hud.png) | ![Dodge](Docs/images/screenshot_dodge.png) |
+
+| Intro Guardian (kamera sinematik + letterbox) | Phase 3 Enrage (fokus kamera) |
+|---|---|
+| ![Intro](Docs/images/screenshot_boss_intro.png) | ![Enrage](Docs/images/screenshot_enrage.png) |
+
+| Fitur | Keterangan |
+|---|---|
+| Post-processing | Bloom membuat obor, sihir, dan aura Enrage bersinar; tonemapping ACES; bayangan kebiruan & highlight hangat. Dinamis: kena hit → aberasi kromatik + distorsi lensa, HP kritis → warna memudar, Pause → latar blur, kalah → hitam-putih |
+| Dodge | Space / klik kanan. Menerjang 0.28 detik, **kebal 0.32 detik**, cooldown 0.75 detik (bar DODGE di HUD). Bisa menembus Slam, Charge, proyektil, dan jebakan |
+| Health Potion | 3 botol merah (Vestibule, Katakombe, Sanctum), +35 HP. Tidak diambil kalau HP penuh |
+| Penunjuk objective | Panah emas di lantai mengarah ke tikungan pertama hasil `NavMesh.CalculatePath` menuju objective aktif, jadi menuntun lewat pintu & koridor |
+| Kamera sinematik | Pintu dibuka → kamera menyorot Guardian; Enrage & Guardian kalah → zoom + fokus; menang/kalah → zoom ke player dan berputar perlahan |
+| Fade | Layar memudar ke hitam (suara ikut meredup) sebelum scene di-load ulang |
 
 ## Audio
 
@@ -207,7 +256,8 @@ Musik dibuat prosedural (`Tools/AudioGen/generate_music.py`) sebagai 4 *stem* de
 | Ada musuh **Investigate / Search / Flee** | TENSION | explore + combat pelan |
 | Ada musuh **Chase / Attack / Reposition** (+ tahan 4 detik) | COMBAT | taiko + bass ostinato + tremolo |
 | Guardian bertarung | BOSS | drum berat + bass distorsi + brass + choir |
-| Guardian **Enrage** | BOSS PHASE 2 | + hi-hat cepat, roll, disonansi |
+| Guardian **Phase 2** (Necromancer) | BOSS PHASE 2 | boss + taiko/ostinato combat |
+| Guardian **Phase 3** (Enrage) | BOSS PHASE 3 | boss + hi-hat cepat, roll, disonansi |
 
 Mode musik yang aktif ikut ditampilkan di panel **AI Debug Mode (F1)**.
 
@@ -221,7 +271,7 @@ Mode musik yang aktif ikut ditampilkan di panel **AI Debug Mode (F1)**.
 |---|---|
 | ![HUD](Docs/images/screenshot_ui_hud.png) | ![HP kritis](Docs/images/screenshot_ui_low_hp.png) |
 
-| Bar boss (Phase 2) | Pause |
+| Bar boss Phase 2 + jumlah minion (penanda batas phase 66% / 33%) | Pause |
 |---|---|
 | ![Boss](Docs/images/screenshot_ui_boss_bar.png) | ![Pause](Docs/images/screenshot_ui_pause.png) |
 

@@ -54,6 +54,7 @@ Assets/_DungeonHunter/
 │   ├── AudioImportSettings.cs
 │   ├── KayKitImportSettings.cs
 │   ├── KayKitVisuals.cs
+│   ├── PostFXAssets.cs
 │   └── VFXAssets.cs
 ├── ThirdParty/KayKit/   model, animasi, tekstur KayKit (CC0)
 ├── ThirdParty/Kenney/   efek suara Kenney (CC0), dimuat lewat Resources
@@ -64,16 +65,28 @@ Assets/_DungeonHunter/
     │                BehaviorTree, GuardianEnemy
     ├── Core/        Health, NoiseSystem, HitFlash, CharacterAnimator, GameManager
     ├── DebugTools/  AIDebugManager, EnemyDebugVisual, NavigationDebugVisual
-    ├── Gameplay/    ProximityInteractable, KeyPickup, LockedDoor, ArtifactPickup, Portcullis, SpikeTrap
-    ├── UI/          GameUI, UIKit, UIButtonFX
+    ├── Gameplay/    ProximityInteractable, KeyPickup, LockedDoor, ArtifactPickup, Portcullis, SpikeTrap,
+    │                HealthPotion, ObjectivePointer
+    ├── UI/          GameUI, UIKit, UIButtonFX, ScreenFader
     ├── Audio/       AudioManager, SoundLibrary, MusicDirector, FootstepAudio
-    ├── VFX/         VFXManager, SlashArc, TelegraphLine, DamageFeedback, TorchFX, AmbientSparkles
+    ├── VFX/         VFXManager, SlashArc, TelegraphLine, DamageFeedback, TorchFX, AmbientSparkles,
+    │                DodgeGhost, PostFXController
     └── Player/      PlayerController, PlayerCombat, TopDownCamera
 ```
 
 Peta level:
 
 ![Peta navigasi](Docs/images/peta_navigasi.png)
+
+| Ruangan | Fungsi |
+|---|---|
+| **Entrance** (selatan) | Spawn player. Tersambung ke Great Hall; gerbang di sisi timur (jalan pintas Katakombe) tertutup di awal |
+| **Great Hall** (pusat) | Persimpangan semua sayap. 2 Skeleton Warrior berpatroli, jebakan duri di tengah, 4 pilar penghalang pandangan |
+| **Armory** (barat) | **Tuas 1** ada di atas balkon 1.4 m (naik lewat ramp), dijaga Crossbowman di balkon dan Warrior di bawah. Menarik tuas membuka gerbang Treasury dan berisik → musuh datang memeriksa |
+| **Treasury** (timur) | **Dungeon Key** dijaga Skeleton Mage. Begitu Key diambil, gerbang **terbanting menutup** → jalan pulang terputus |
+| **Katakombe** (tenggara) | Satu-satunya jalan keluar dari Treasury. Dua lorong: atas pendek tapi berjebakan, bawah memutar tapi aman. Warrior menyergap di crypt; **Tuas 2** membuka jalan pintas ke Entrance |
+| **Vestibule** | Ruang kecil sebelum pintu Sanctum, ada Health Potion |
+| **Sanctum Guardian** (utara) | Arena Crypt Guardian dengan 4 pilar — berguna untuk berlindung dari Charge. Artifact di ujung utara |
 
 ---
 
@@ -86,6 +99,7 @@ Menyimpan HP. Dipakai oleh player dan enemy.
 
 - `TakeDamage(jumlah, posisiSumber)` dan `Heal(jumlah)`
 - Event `Damaged` dan `Died`, supaya class lain bisa bereaksi saat kena damage atau mati
+- `Invulnerable` (i-frame saat dodge): damage dibatalkan dan memicu event `Evaded`; event `Healed` saat HP pulih
 
 ### `NoiseSystem`
 `Scripts/Core/NoiseSystem.cs`
@@ -114,7 +128,7 @@ Penghubung antara logika (AI / player) dan Animator model KayKit.
 | `Speed` | Dihitung dari perpindahan posisi tiap frame → blend idle / jalan / lari |
 | `Attack` | `PlayerCombat`, `MeleeEnemy` (saat windup), `RangedEnemy` (saat membidik), Guardian (Slam) |
 | `Attack2` | Guardian (windup Charge) |
-| `Taunt` | Guardian (Enrage / Phase 2) |
+| `Taunt` | Guardian (summon minion / Enrage) |
 | `Hit` | Otomatis dari event `Health.Damaged` (Guardian tidak bereaksi agar serangannya tidak terputus) |
 | `Dead` | Otomatis dari event `Health.Died` |
 
@@ -129,7 +143,7 @@ Mengatur alur game.
 - Status game: `Menu`, `Playing`, `Paused`, `Won`, `Lost`; setiap perubahan dikirim lewat event `StateChanged` (didengar UI)
 - `StartGame()`, `Pause()`, `Resume()`, `Restart()`, `Quit()` — dipanggil tombol UI; **Esc** untuk pause
 - Saat `Paused`, `VFXManager` membuat `Time.timeScale = 0` sehingga AI, fisika, dan animasi berhenti
-- Progres objective (`ObjectiveStep` 0–4): Key → pintu ruang Guardian → Guardian kalah → Artifact
+- Progres objective (`ObjectiveStep` 0–5): tuas Armory → Key → tuas Katakombe (kabur) → Guardian kalah → Artifact; event tuas lewat `NotifyLeverPulled`
 - Event `KeyCollected` (dipakai gerbang besi untuk menutup)
 - Teks objective dan pesan di layar, jumlah kill, timer, total damage yang diterima
 - Tombol **R** untuk restart setelah menang atau kalah (langsung main, tanpa main menu)
@@ -152,10 +166,17 @@ Mengatur alur game.
 
 Akibatnya, sprint lebih mudah ketahuan enemy.
 
+**Dodge** (Space / klik kanan):
+
+- Menerjang ke arah input WASD (atau arah hadap) selama 0.28 detik, cepat di awal lalu melambat
+- **Kebal 0.32 detik** (`Health.Invulnerable`), cooldown 0.75 detik
+- Serangan yang lolos karena i-frame memunculkan **DODGE!**; serangan besar (≥ 20 damage) memunculkan **PERFECT DODGE!** + slow-motion singkat
+- Bayangan *afterimage* (`DodgeGhost`) dan noise kecil (radius 4 m)
+
 ### `PlayerCombat`
 `Scripts/Player/PlayerCombat.cs`
 
-- Serangan pedang dengan **klik kiri** atau **Space**
+- Serangan pedang dengan **klik kiri** atau **J** (Space dipakai untuk dodge)
 - Mengenai semua enemy dalam busur **120°** di depan, jangkauan **2.3 m**, damage **25**
 - Ada animasi ayunan pedang
 - Setiap serangan memancarkan suara (radius 9 m)
@@ -167,6 +188,9 @@ Kamera dari atas yang mengikuti player.
 
 - Camera shake berbasis *trauma* (`TopDownCamera.Shake`)
 - Saat main menu, kamera mengorbit perlahan di atas dungeon, lalu transisi halus ke player saat **MULAI**
+- **Momen sinematik** `TopDownCamera.Focus(titik, durasi, zoom, geser)`: dipakai saat pintu Guardian dibuka (menyorot Guardian),
+  Enrage, Guardian kalah, dan mengambil Key. Selama momen ini UI menampilkan *letterbox*
+- Saat menang / kalah kamera zoom ke player dan berputar perlahan
 
 ---
 
@@ -215,7 +239,7 @@ Class dasar (abstract) semua enemy, berupa **Finite State Machine**.
 | `Attack` | Menyerang |
 | `Reposition` | Mundur untuk menjaga jarak |
 | `Flee` | Kabur ke Retreat Point saat HP rendah, lalu regen |
-| `Guard`, `Return`, `Enrage`, `Charge` | Khusus Guardian (diatur Behavior Tree) |
+| `Guard`, `Return`, `Summon`, `Enrage`, `Charge` | Khusus Guardian (diatur Behavior Tree) |
 | `Dead` | Badan jatuh lalu dinonaktifkan |
 
 **Perilaku umum:**
@@ -311,16 +335,36 @@ Framework Behavior Tree kecil (materi Pertemuan 6).
 
 ![Behavior Tree Guardian](Docs/images/bt_guardian.png)
 
+| Summon minion | Bone Eruption (duri di posisi + prediksi player) |
+|---|---|
+| ![Summon](Docs/images/screenshot_summon.png) | ![Bone Eruption](Docs/images/screenshot_bone_eruption.png) |
+
+Tiga phase, skill bertambah di setiap phase (HP Guardian 400):
+
+| Phase | HP | Skill |
+|---|---|---|
+| 1 — Warden | > 66% | Kejar, Ground Slam, **Summon** (hanya jika player kiting) — maks 2 minion |
+| 2 — Necromancer | ≤ 66% | + gelombang 3 minion, Summon setiap minion berkurang (maks 3, cooldown 10 s), **Bone Eruption** |
+| 3 — Enraged | ≤ 33% | + lebih cepat ×1.4, **Triple Slam**, **Charge**, Bone Eruption 5 titik & lebih cepat |
+
 | Cabang | Kondisi | Aksi |
 |---|---|---|
-| Phase 2 | HP ≤ 50% dan belum enrage | **Enrage**: diam 1.2 detik, kecepatan ×1.4, cooldown slam ×0.7 |
+| Phase 2 | HP ≤ 66% dan belum Phase 2 | **Bangkitkan minion**: channel 1.3 detik, lingkaran hijau di titik NavMesh → gelombang minion |
+| Phase 3 | HP ≤ 33% dan sudah Phase 2 | **Enrage**: diam 1.2 detik, kecepatan ×1.4, cooldown Slam & Eruption turun |
 | Leash | Player keluar arena (> 10 m dari pos) | **Kembali ke pos** + regen 15 HP/detik |
-| Ground Slam | Jarak ≤ 2.6 m dan cooldown siap | Windup 0.8 detik (merah) → damage area 3 m, 25 damage |
-| Charge | Phase 2, melihat player, jarak 4.5–10 m, cooldown siap | Windup 0.6 detik (oranye) → menerjang 0.8 detik, 20 damage |
+| Summon | Minion < batas phase (2/3/3) **dan** (player *kiting* > 8 m selama 1.5 detik **atau** Phase ≥ 2), cooldown siap | **Bangkitkan minion**. Saat kiting, minion muncul di antara Guardian dan player untuk memotong jalan |
+| Ground Slam | Jarak ≤ 2.6 m dan cooldown siap | Windup 0.8 detik → area 3 m, 25 damage. **Phase 3: Triple Slam** — 3 hentakan beruntun, radius ×1.2 tiap hentakan, sambil maju |
+| Charge | Phase 3, melihat player, jarak 4.5–10 m, cooldown siap | Windup 0.6 detik → menerjang 0.8 detik, 20 damage |
+| Bone Eruption | Phase ≥ 2, **melihat** player, jarak 5–16 m, cooldown 6 detik | Lingkaran di posisi player **sekarang**, posisi **prediksi** (posisi + kecepatan × windup), dan di sampingnya → duri tulang, 18 damage. Player yang bergerak lurus akan kena; berbelok, dodge, atau berlindung di balik pilar (memutus line of sight) |
 | Kejar | Player / LKP berada di dalam arena | Kejar player atau menuju LKP |
 | Jaga pos | — (fallback) | Berjaga di pos sambil melihat sekeliling |
 
-- Enrage, Slam, dan Charge bersifat **committed**: sekali mulai, diselesaikan dulu
+- Semua skill bersifat **committed**: sekali mulai, diselesaikan dulu
+- **Skeleton Minion** = `MeleeEnemy` biasa (prefab `Prefabs/Skeleton_Minion`, model KayKit `Skeleton_Minion`): HP 25, cepat, tidak kabur.
+  Saat muncul langsung masuk **Chase** (`AggroOnSpawn`) dan memakai FSM melee yang sama. Semua minion runtuh saat Guardian kalah
+- Perception Guardian 20 m / 200° (mengawasi seluruh arena), tetapi pilar tetap memblokir line of sight
+- Bar boss menampilkan phase aktif dan jumlah minion, dengan garis penanda di 66% dan 33%
+- `BoneSpikes` (`Scripts/VFX/BoneSpikes.cs`): duri spektral prosedural yang menyembul lalu tenggelam
 - Guardian tidak mengejar keluar arena, sehingga player bisa mundur untuk mengatur ulang posisi (tapi Guardian memulihkan HP)
 - Area Trap cost 1 → Guardian tidak peduli jebakan
 
@@ -355,20 +399,39 @@ Ancient Artifact.
 - **Tersegel** (lingkaran ungu) selama Guardian masih hidup
 - Setelah Guardian kalah → diambil → **WIN**
 
+### `HealthPotion`
+`Scripts/Gameplay/HealthPotion.cs`
+
+Botol merah yang memulihkan **35 HP** saat didekati. Tidak diambil jika HP masih penuh.
+Ada 3 di peta (karakter `H` di peta ASCII builder).
+
+### `ObjectivePointer`
+`Scripts/Gameplay/ObjectivePointer.cs`
+
+Panah emas di lantai sekitar player yang menunjuk objective aktif (tuas Armory → Key → tuas Katakombe → pintu/Guardian → Artifact).
+Arahnya diambil dari **tikungan pertama** `NavMesh.CalculatePath`, bukan garis lurus, sehingga panah
+menuntun lewat pintu dan koridor. Disembunyikan saat target sudah dekat atau saat duel Guardian.
+
 ### `Portcullis`
 `Scripts/Gameplay/Portcullis.cs`
 
-Gerbang besi antara hall dan ruang timur — **dynamic obstacle**.
+Gerbang besi — **dynamic obstacle**. Ada dua:
 
-- Awalnya terbuka
-- Saat Key diambil (event `KeyCollected`), gerbang naik menutup jalur dan `NavMeshObstacle` (carve) aktif
-- NavMesh berubah → semua enemy otomatis **repath** lewat koridor selatan
-- Player juga harus keluar lewat koridor selatan
+- **Gerbang Treasury**: mulai tertutup → `Open()` dipanggil tuas Armory → `Close()` otomatis saat Key diambil (event `KeyCollected`)
+- **Gerbang jalan pintas**: mulai tertutup → dibuka tuas Katakombe
+- Saat tertutup `NavMeshObstacle` (carve) aktif; saat terbuka penuh carve dimatikan
+- NavMesh berubah → semua enemy otomatis **repath**; player yang terkunci di Treasury harus kabur lewat Katakombe
+
+### `Lever`
+`Scripts/Gameplay/Lever.cs`
+
+Tuas yang membuka gerbang saat didekati: gagang berayun, lampu indikator kuning → hijau, kamera menyorot gerbang.
+Menarik tuas memancarkan **noise radius 14 m** — musuh di sekitar akan datang memeriksa (Investigate).
 
 ### `SpikeTrap`
 `Scripts/Gameplay/SpikeTrap.cs`
 
-Jebakan duri di tengah hall — **Area Cost**.
+Jebakan duri di tengah Great Hall dan di lorong atas Katakombe — **Area Cost**.
 
 - Lantainya ditandai area NavMesh **`Trap`** (cost tinggi) lewat `NavMeshModifierVolume`, sehingga enemy memilih jalan memutar
 - Siklus: diam 1.6 detik → peringatan 0.5 detik (duri muncul sedikit) → aktif 0.8 detik
@@ -510,6 +573,29 @@ lalu material partikel additive / alpha blended / debris.
 
 ---
 
+## Post-processing
+
+### `PostFXAssets` (Editor) & `PostFXController`
+`Editor/PostFXAssets.cs`, `Scripts/VFX/PostFXController.cs`
+
+Volume global URP dengan profile `Settings/DungeonPostFX.asset`: Bloom, Tonemapping ACES, Color Adjustments,
+Shadows-Midtones-Highlights (bayangan kebiruan, highlight hangat), Vignette, Film Grain.
+`PostFXController` meng-clone profile lalu menganimasikannya:
+
+| Kejadian | Efek |
+|---|---|
+| Player kena hit | Chromatic aberration + lens distortion sesaat |
+| HP < 35% | Warna memudar, vignette lebih pekat |
+| Slow-motion | Aberasi + desaturasi |
+| Guardian Enrage | Bloom lebih kuat |
+| Pause | Latar blur (Depth of Field Gaussian) + abu-abu |
+| Menang / kalah | Lebih terang & bloom kuat / perlahan hitam-putih |
+
+### `DodgeGhost`
+`Scripts/VFX/DodgeGhost.cs` — pose karakter di-*bake* (`SkinnedMeshRenderer.BakeMesh`) menjadi mesh biru terang yang memudar.
+
+---
+
 ## UI — antarmuka
 
 Semua UI dibuat lewat kode saat runtime dengan uGUI. Tidak ada prefab atau gambar UI dari luar.
@@ -544,6 +630,12 @@ Toolkit kecil untuk `GameUI`:
 - Palet warna tema *dark fantasy* (emas, merah tua, ungu boss)
 - Sprite prosedural: panel bersudut membulat dengan bingkai emas (9-slice), tombol, bar, lingkaran, vignette, glow
 - Helper: `NewRect`, `Stretch`, `AddImage`, `AddText`, `MakeButton`, `MakeBar`, `SetBar`
+
+### `ScreenFader`
+`Scripts/UI/ScreenFader.cs`
+
+Fade dari hitam saat scene dimulai, dan fade ke hitam (volume suara ikut turun) sebelum `Restart` / kembali ke menu / keluar.
+Selama transisi klik diblokir supaya tombol tidak terpencet dua kali.
 
 ### `UIButtonFX`
 `Scripts/UI/UIButtonFX.cs`
@@ -586,7 +678,8 @@ Musik membaca **state AI** setiap frame:
 | Ada musuh `Chase` / `Attack` / `Reposition` | **COMBAT** (bertahan 4 detik setelah pengejaran berhenti) |
 | Ada musuh `Investigate` / `Search` / `Flee` | **TENSION** |
 | Guardian bertarung (pintu terbuka & tidak sedang `Guard`) | **BOSS** |
-| Guardian `IsEnraged` | **BOSS PHASE 2** |
+| Guardian Phase 2 (Necromancer) | **BOSS PHASE 2** (+ lapisan combat) |
+| Guardian Phase 3 (Enrage) | **BOSS PHASE 3** |
 | Tidak ada yang waspada | **EXPLORE** |
 
 - 4 stem (explore, combat, boss, boss2) bertempo & berakor sama, dimulai di waktu DSP yang sama (`PlayScheduled`) sehingga selalu sinkron; perpindahan mode hanya mengubah volume (crossfade)
@@ -667,7 +760,8 @@ Legenda peta (1 karakter = 1 kotak 2×2 m):
 | `.` | Lantai |
 | `P` | Spawn player |
 | `M` | Melee enemy |
-| `R` | Ranged enemy |
+| `R` | Skeleton Crossbowman |
+| `Q` | Skeleton Mage |
 | `G` | Guardian |
 | `K` | Dungeon Key |
 | `D` | Pintu ruang Guardian |
@@ -675,10 +769,15 @@ Legenda peta (1 karakter = 1 kotak 2×2 m):
 | `w` | Waypoint patroli |
 | `S` | Retreat Point (tujuan Flee) |
 | `T` | Jebakan duri (area `Trap`) |
-| `g` | Gerbang besi |
+| `g` | Gerbang Treasury (dibuka tuas Armory, menutup saat Key diambil) |
+| `j` | Gerbang jalan pintas Katakombe → Entrance |
+| `V` / `v` | Tuas Armory / tuas Katakombe |
+| `H` | Health Potion |
 | `L` | Obor / lampu |
 
 Balkon dan ramp didefinisikan lewat konstanta di builder (bukan karakter peta).
+Setiap waypoint otomatis menjadi milik Warrior terdekat, sehingga tiap ruangan punya rute patroli sendiri.
+Sel `T` yang bersebelahan digabung menjadi satu jebakan (bisa ada beberapa jebakan).
 
 Bentuk dungeon cukup diubah dengan mengedit peta teks di file itu, lalu menjalankan menu tersebut lagi.
 
@@ -688,9 +787,10 @@ Bentuk dungeon cukup diubah dengan mengedit peta teks di file itu, lalu menjalan
 
 ### Gameplay
 
-- Dungeon dengan 5 ruangan, balkon, koridor selatan, pilar penghalang pandangan, jebakan duri, dan gerbang besi
-- Player bisa bergerak, sprint, dan menyerang dengan pedang
-- Alur: cari Key → buka pintu → kalahkan Guardian → ambil Artifact → **WIN**; HP habis → **LOSE**; tekan **R** untuk main lagi
+- Dungeon 7 ruangan yang saling terkunci: Entrance, Great Hall, Armory (balkon + tuas), Treasury (Key), Katakombe (dua lorong + tuas jalan pintas), Vestibule, Sanctum Guardian
+- Player bisa bergerak, sprint, menyerang dengan pedang, dan **dodge** (kebal sesaat)
+- Health Potion, panah penunjuk objective (mengikuti jalur NavMesh), kamera sinematik, post-processing, transisi fade
+- Alur: tuas Armory → Key di Treasury (gerbang menutup) → kabur lewat Katakombe → kalahkan Guardian → ambil Artifact → **WIN**; HP habis → **LOSE**; tekan **R** untuk main lagi
 - Main menu, cara bermain, pause (dengan slider volume), layar Victory / Defeat
 - Efek suara 3D untuk combat, AI, level, dan UI; musik adaptif yang mengikuti state AI
 - HUD (HP, Key, checklist objective, bar boss), toast pesan, dan vignette saat kena damage
@@ -724,7 +824,8 @@ Bentuk dungeon cukup diubah dengan mengedit peta teks di file itu, lalu menjalan
 |---|---|
 | WASD | Bergerak |
 | Mouse | Arah hadap |
-| Klik kiri / Space | Serang |
+| Klik kiri / J | Serang |
+| Space / Klik kanan | Dodge |
 | Shift | Sprint (lebih berisik) |
 | F1 | AI Debug Mode |
 | Esc | Pause / lanjutkan (+ atur volume) |

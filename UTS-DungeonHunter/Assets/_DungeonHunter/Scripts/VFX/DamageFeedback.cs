@@ -86,6 +86,7 @@ namespace DungeonHunter
                 VFXManager.Shake(1f);
                 VFXManager.SlowMotion(0.25f, 1.2f);
                 VFXManager.FloatingLabel(body + Vector3.up * 2f, "GUARDIAN DEFEATED", new Color(1f, 0.85f, 0.3f), 34f);
+                TopDownCamera.Focus(transform.position, 2.4f, 0.6f, 0.85f);
             }
             else if (isPlayer)
             {

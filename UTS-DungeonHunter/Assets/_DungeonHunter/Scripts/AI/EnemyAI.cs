@@ -16,8 +16,9 @@ namespace DungeonHunter
         Flee,        // Retreat ke titik aman saat HP rendah
         Guard,       // Guardian berjaga di pos
         Return,      // Guardian kembali ke pos (leash)
-        Enrage,      // Guardian masuk Phase 2
-        Charge,      // Guardian menerjang (Phase 2)
+        Summon,      // Guardian membangkitkan minion (Phase 2)
+        Enrage,      // Guardian masuk Phase 3
+        Charge,      // Guardian menerjang (Phase 3)
         Dead
     }
 
@@ -182,9 +183,19 @@ namespace DungeonHunter
         {
             homePosition = transform.position;
             homeRotation = transform.rotation;
-            EnterState(InitialState);
-            State = InitialState;
+
+            // Minion hasil summon: langsung tahu posisi player dan mengejar
+            EnemyState first = spawnAggro && target != null ? EnemyState.Chase : InitialState;
+            if (first == EnemyState.Chase)
+                memory.RememberSeen(target.position);
+            EnterState(first);
+            State = first;
         }
+
+        private bool spawnAggro;
+
+        /// <summary>Dipanggil sebelum Start (mis. oleh Guardian saat summon): enemy langsung masuk Chase.</summary>
+        public void AggroOnSpawn() => spawnAggro = true;
 
         protected virtual EnemyState InitialState => EnemyState.Patrol;
 

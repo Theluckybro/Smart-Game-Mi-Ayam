@@ -7,7 +7,7 @@ namespace DungeonHunter
     /// - Speed  : dihitung dari perpindahan posisi (berlaku untuk NavMeshAgent, CharacterController,
     ///            lompatan NavMeshLink, maupun Charge Guardian)
     /// - Hit / Dead : otomatis dari event Health
-    /// - Attack / Attack2 / Taunt : dipanggil oleh AI / PlayerCombat
+    /// - Attack / Attack2 / Taunt / Dodge : dipanggil oleh AI / PlayerCombat / PlayerController
     /// </summary>
     public class CharacterAnimator : MonoBehaviour
     {
@@ -17,6 +17,7 @@ namespace DungeonHunter
         private static readonly int HitId = Animator.StringToHash("Hit");
         private static readonly int DeadId = Animator.StringToHash("Dead");
         private static readonly int TauntId = Animator.StringToHash("Taunt");
+        private static readonly int DodgeId = Animator.StringToHash("Dodge");
 
         [SerializeField] private Animator animator;
         [SerializeField] private bool reactToHits = true;
@@ -67,6 +68,7 @@ namespace DungeonHunter
         public void Attack() => SetTrigger(AttackId);
         public void Attack2() => SetTrigger(Attack2Id);
         public void Taunt() => SetTrigger(TauntId);
+        public void Dodge() => SetTrigger(DodgeId);
 
         private void OnDamaged(float amount, Vector3 source)
         {

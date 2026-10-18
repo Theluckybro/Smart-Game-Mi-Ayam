@@ -23,6 +23,7 @@ namespace DungeonHunter
         [SerializeField] private Material telegraph;
         [SerializeField] private Material debris;
         [SerializeField] private Material line;
+        [SerializeField] private Material solid;
 
         private ParticleSystem sparks;
         private ParticleSystem glow;
@@ -42,6 +43,7 @@ namespace DungeonHunter
 
         public Material Additive => additive;
         public Material AlphaBlend => alphaBlend;
+        public Material Solid => solid;
 
         private class FloatingText
         {

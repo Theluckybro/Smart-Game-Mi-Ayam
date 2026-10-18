@@ -22,7 +22,7 @@ namespace DungeonHunter
 
         // Level & objective
         KeyPickup, DoorUnlock, DoorOpen, DoorCreak, GateSlam, Chains,
-        SpikeWarn, SpikeStrike, SealBreak, ArtifactPickup, Drip,
+        SpikeWarn, SpikeStrike, SealBreak, ArtifactPickup, Drip, PotionPickup, Heal,
         JingleKey, JingleVictory, JingleDefeat,
 
         // UI
@@ -103,6 +103,8 @@ namespace DungeonHunter
             [Sfx.SpikeStrike] = K(0.35f, 1.15f, 1.3f, Seq("impactMetal_light_", 5)).Range(18f).Cool(0.1f),
             [Sfx.SealBreak] = K(0.7f, 0.75f, 0.85f, Seq("impactGlass_heavy_", 5)).Range(45f),
             [Sfx.ArtifactPickup] = K(0.6f, 1f, 1f, "impactBell_heavy_001"),
+            [Sfx.PotionPickup] = K(0.8f, 1.1f, 1.3f, Seq("impactGlass_light_", 5)),
+            [Sfx.Heal] = K(0.35f, 1.9f, 2.1f, Seq("forceField_", 5)).Blend(0.3f),
             [Sfx.Drip] = new SfxDef { Clips = new[] { "Ambient/drip_0", "Ambient/drip_1", "Ambient/drip_2", "Ambient/drip_3" },
                 Volume = 0.25f, PitchMin = 0.85f, PitchMax = 1.2f, Spatial = 1f, MaxDistance = 26f },
             [Sfx.JingleKey] = K(0.55f, 1f, 1f, "jingles_PIZZI02").TwoD(),

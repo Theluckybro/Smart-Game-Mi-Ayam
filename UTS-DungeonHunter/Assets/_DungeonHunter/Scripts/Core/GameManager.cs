@@ -16,7 +16,8 @@ namespace DungeonHunter
 
     /// <summary>
     /// Mengatur gameplay loop:
-    /// MENU → START → cari Key → buka pintu → kalahkan Guardian → ambil Artifact → WIN
+    /// MENU → START → tuas Armory → Key di Treasury (gerbang menutup) → kabur lewat Katakombe (tuas jalan pintas)
+    /// → kalahkan Guardian → ambil Artifact → WIN
     /// Player mati → LOSE.  Esc → PAUSE.
     /// </summary>
     public class GameManager : MonoBehaviour
@@ -33,6 +34,8 @@ namespace DungeonHunter
         public bool IsPlaying => State == GameState.Playing;
         public bool IsGameOver => State == GameState.Won || State == GameState.Lost;
         public bool HasKey { get; private set; }
+        public bool ArmoryLeverPulled { get; private set; }
+        public bool ShortcutOpened { get; private set; }
         public bool DoorOpened { get; private set; }
         public bool GuardianDefeated { get; private set; }
         public Health PlayerHealth => playerHealth;
@@ -49,23 +52,28 @@ namespace DungeonHunter
         /// <summary>Dipanggil setiap kali state game berubah (dipakai UI).</summary>
         public event Action<GameState> StateChanged;
 
-        /// <summary>Indeks langkah objective saat ini (0 = Key, 1 = pintu, 2 = Guardian, 3 = Artifact, 4 = selesai).</summary>
+        /// <summary>
+        /// Indeks langkah objective: 0 = tuas Armory, 1 = Key, 2 = kabur lewat Katakombe,
+        /// 3 = kalahkan Guardian, 4 = Artifact, 5 = selesai.
+        /// </summary>
         public int ObjectiveStep
         {
             get
             {
-                if (State == GameState.Won) return 4;
-                if (!HasKey) return 0;
-                if (!DoorOpened) return 1;
-                if (!GuardianDefeated) return 2;
-                return 3;
+                if (State == GameState.Won) return 5;
+                if (!ArmoryLeverPulled) return 0;
+                if (!HasKey) return 1;
+                if (!ShortcutOpened) return 2;
+                if (!GuardianDefeated) return 3;
+                return 4;
             }
         }
 
         public static readonly string[] ObjectiveTexts =
         {
-            "Cari Dungeon Key",
-            "Buka pintu ruang Guardian",
+            "Tarik tuas di Armory (barat)",
+            "Ambil Dungeon Key di Treasury",
+            "Kabur lewat Katakombe",
             "Kalahkan Crypt Guardian",
             "Ambil Ancient Artifact"
         };
@@ -101,7 +109,7 @@ namespace DungeonHunter
         private void Start()
         {
             if (State == GameState.Playing)
-                ShowMessage("Jelajahi dungeon dan temukan Dungeon Key!");
+                ShowMessage("Gerbang Treasury terkunci. Cari tuasnya di Armory (barat)!");
         }
 
         private void Update()
@@ -153,17 +161,24 @@ namespace DungeonHunter
         public void Restart(bool skipMenu)
         {
             skipMenuOnNextLoad = skipMenu;
-            Time.timeScale = 1f;
-            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+            // layar memudar ke hitam dulu, baru scene di-load ulang
+            UI.ScreenFader.FadeOutThen(() =>
+            {
+                Time.timeScale = 1f;
+                SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+            });
         }
 
         public void Quit()
         {
+            UI.ScreenFader.FadeOutThen(() =>
+            {
 #if UNITY_EDITOR
-            UnityEditor.EditorApplication.isPlaying = false;
+                UnityEditor.EditorApplication.isPlaying = false;
 #else
-            Application.Quit();
+                Application.Quit();
 #endif
+            });
         }
 
         private void SetState(GameState state)
@@ -189,8 +204,23 @@ namespace DungeonHunter
             if (HasKey)
                 return;
             HasKey = true;
-            ShowMessage("Dungeon Key didapat! Buka pintu ruang Guardian.");
+            ShowMessage("Dungeon Key didapat!");
             KeyCollected?.Invoke();
+        }
+
+        /// <summary>Dipanggil Lever: 0 = tuas Armory, 1 = tuas jalan pintas Katakombe.</summary>
+        public void NotifyLeverPulled(int index)
+        {
+            if (index == 0)
+            {
+                ArmoryLeverPulled = true;
+                ShowMessage("Gerbang Treasury terbuka! Ambil Dungeon Key di timur.");
+            }
+            else
+            {
+                ShortcutOpened = true;
+                ShowMessage("Jalan pintas terbuka! Kembali ke hall, menuju ruang Guardian di utara.");
+            }
         }
 
         public void NotifyDoorOpened()

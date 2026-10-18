@@ -37,6 +37,10 @@ namespace DungeonHunter.UI
         private float lastSeenMessageTime = -100f;
         private Image vignette;
         private float damageFlash;
+        private float healFlash;
+        private PlayerController playerController;
+        private RectTransform dodgeFill;
+        private Text dodgeLabel;
         private float hpChipValue = 1f, hpChipDelay;
 
         // Boss
@@ -68,6 +72,7 @@ namespace DungeonHunter.UI
 
         private void Awake()
         {
+            gameObject.AddComponent<ScreenFader>();
             BuildCanvas();
             BuildHud();
             BuildBossBar();
@@ -75,7 +80,30 @@ namespace DungeonHunter.UI
             BuildHowTo();
             BuildPause();
             BuildEnd();
+            BuildLetterbox();
             EnsureEventSystem();
+        }
+
+        // ---- Letterbox (bar hitam sinematik) ----
+        private RectTransform letterTop, letterBottom;
+        private float letterAmount;
+
+        private void BuildLetterbox()
+        {
+            letterTop = UIKit.NewRect("LetterboxTop", root, new Vector2(0.5f, 1f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(4000f, 90f));
+            letterBottom = UIKit.NewRect("LetterboxBottom", root, new Vector2(0.5f, 0f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(4000f, 90f));
+            UIKit.AddImage(letterTop, null, Color.black);
+            UIKit.AddImage(letterBottom, null, Color.black);
+            letterTop.SetSiblingIndex(1);
+            letterBottom.SetSiblingIndex(1);
+        }
+
+        private void UpdateLetterbox(float dt)
+        {
+            letterAmount = Mathf.MoveTowards(letterAmount, TopDownCamera.CinematicActive ? 1f : 0f, dt * 2.5f);
+            float e = letterAmount * letterAmount * (3f - 2f * letterAmount);
+            letterTop.anchoredPosition = new Vector2(0f, -90f * e);
+            letterBottom.anchoredPosition = new Vector2(0f, 90f * e);
         }
 
         private void Start()
@@ -85,11 +113,15 @@ namespace DungeonHunter.UI
             guardian = FindFirstObjectByType<GuardianEnemy>();
 
             if (playerHp != null)
+            {
                 playerHp.Damaged += (amount, source) =>
                 {
                     damageFlash = Mathf.Min(1f, damageFlash + 0.55f);
                     hpChipDelay = 0.45f;
                 };
+                playerHp.Healed += amount => healFlash = 1f;
+                playerController = playerHp.GetComponent<PlayerController>();
+            }
             if (guardian != null)
                 guardian.Health.Damaged += (amount, source) => bossChipDelay = 0.45f;
 
@@ -164,13 +196,21 @@ namespace DungeonHunter.UI
             hpText = UIKit.Label("HP", player, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(20f, -78f), new Vector2(340f, 24f),
                 "100 / 100", 18, UIKit.TextLight);
 
+            // Indikator dodge: bar kecil yang terisi saat dodge siap
+            dodgeLabel = UIKit.Label("DodgeLabel", player, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(180f, -78f), new Vector2(80f, 24f),
+                "DODGE", 16, UIKit.TextDim, TextAnchor.MiddleRight, FontStyle.Bold);
+            RectTransform dodgeChip;
+            (dodgeFill, dodgeChip) = UIKit.MakeBar(player, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(268f, -84f), new Vector2(92f, 12f),
+                new Color(0.45f, 0.8f, 1f));
+            dodgeChip.gameObject.SetActive(false);
+
             keyFrame = UIKit.AddImage(UIKit.NewRect("KeySlot", player, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-18f, 0f), new Vector2(78f, 78f)),
                 UIKit.PanelSprite, new Color(0.6f, 0.6f, 0.6f), true);
             keyGlow = UIKit.AddImage(UIKit.Stretch("Glow", keyFrame.transform, -18f), UIKit.GlowSprite, new Color(1f, 0.8f, 0.3f, 0f));
             keyText = UIKit.AddText(UIKit.Stretch("Text", keyFrame.transform), "KEY", 18, UIKit.TextDim, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             // ---- Panel objective ----
-            RectTransform obj = UIKit.NewRect("ObjectivePanel", hud, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -152f), new Vector2(470f, 240f));
+            RectTransform obj = UIKit.NewRect("ObjectivePanel", hud, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(28f, -152f), new Vector2(470f, 96f + GameManager.ObjectiveTexts.Length * 36f));
             UIKit.AddImage(obj, UIKit.PanelSprite, Color.white, true);
             UIKit.Label("Title", obj, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(20f, -12f), new Vector2(300f, 28f),
                 "OBJECTIVE", 20, UIKit.Gold, TextAnchor.MiddleLeft, FontStyle.Bold);
@@ -197,7 +237,7 @@ namespace DungeonHunter.UI
 
             // ---- Hint kontrol ----
             Text hint = UIKit.Label("Hint", hud, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 16f), new Vector2(1400f, 30f),
-                "WASD  Gerak     Shift  Sprint     Klik / Space  Serang     F1  AI Debug     Esc  Pause", 18,
+                "WASD  Gerak     Shift  Sprint     Klik  Serang     Space / Klik Kanan  Dodge     F1  AI Debug     Esc  Pause", 18,
                 new Color(UIKit.TextLight.r, UIKit.TextLight.g, UIKit.TextLight.b, 0.7f), TextAnchor.MiddleCenter);
             hint.fontStyle = FontStyle.Bold;
         }
@@ -212,6 +252,12 @@ namespace DungeonHunter.UI
             bossPhase = UIKit.Label("Phase", box, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-22f, -12f), new Vector2(360f, 28f),
                 "PHASE 1", 18, UIKit.TextLight, TextAnchor.MiddleRight, FontStyle.Bold);
             (bossFill, bossChip) = UIKit.MakeBar(box, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 14f), new Vector2(776f, 24f), UIKit.BossPurple);
+            // garis batas phase (66% & 33%)
+            foreach (float mark in new[] { 0.66f, 0.33f })
+            {
+                RectTransform tick = UIKit.NewRect("PhaseMark", bossFill.parent, new Vector2(mark, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(3f, 30f));
+                UIKit.AddImage(tick, null, new Color(1f, 0.9f, 0.7f, 0.85f));
+            }
             bossFillImage = bossFill.GetComponent<Image>();
         }
 
@@ -262,11 +308,11 @@ namespace DungeonHunter.UI
                 "CARA BERMAIN", 44, UIKit.Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
 
             Column(panel, -400f, "KONTROL",
-                "WASD\nGerak\n\nMouse\nArah hadap\n\nKlik kiri / Space\nSerang (pedang)\n\nShift\nSprint (berisik!)\n\nF1\nAI Debug Mode\n\nEsc\nPause");
+                "WASD  ·  Gerak\nMouse  ·  Arah hadap\n\nKlik kiri / J\nSerang (pedang)\n\nSpace / Klik kanan\nDodge (kebal sesaat)\n\nShift\nSprint (berisik!)\n\nF1  ·  AI Debug Mode\nEsc  ·  Pause");
             Column(panel, 0f, "OBJECTIVE",
-                "1.  Cari Dungeon Key\n     (ruang timur)\n\n2.  Buka pintu ruang Guardian\n     (utara)\n\n3.  Kalahkan Crypt Guardian\n\n4.  Ambil Ancient Artifact\n\nHP habis = kalah");
+                "1.  Tarik tuas di Armory (barat)\n2.  Ambil Key di Treasury (timur)\n3.  Gerbang menutup! Kabur lewat\n     Katakombe, buka jalan pintas\n4.  Kalahkan Crypt Guardian (utara)\n5.  Ambil Ancient Artifact\n\nIkuti panah emas di lantai\nPotion merah = pulihkan HP\nHP habis = kalah");
             Column(panel, 400f, "TIPS MELAWAN AI",
-                "Ikon  !  = musuh melihatmu\nIkon  ?  = musuh curiga\n\nSprint & serangan terdengar\nmusuh di sekitar\n\nLingkaran merah = serangan\nakan datang, menghindar!\n\nArcher selalu menjaga jarak\n\nMusuh menghindari jebakan duri\n\nGuardian tidak keluar arena,\nmengamuk saat HP 50%");
+                "Ikon  !  = musuh melihatmu\nIkon  ?  = musuh curiga\n\nSprint & serangan terdengar\nmusuh di sekitar\n\nLingkaran merah = serangan\nakan datang, DODGE!\n\nArcher selalu menjaga jarak\n\nMusuh menghindari jebakan duri\n\nGuardian tidak keluar arena,\nmengamuk saat HP 50%");
 
             UIKit.MakeButton("Back", panel, new Vector2(0.5f, 0f), new Vector2(0f, 56f), new Vector2(320f, 62f), "KEMBALI", () => OpenHowTo(false), 26);
         }
@@ -406,6 +452,7 @@ namespace DungeonHunter.UI
             UpdateEnemyBars();
             UpdateMenu(dt);
             UpdateEnd(dt);
+            UpdateLetterbox(dt);
 
             if (debugButtonText != null)
                 debugButtonText.text = AIDebugManager.DebugEnabled ? "AI DEBUG: ON" : "AI DEBUG: OFF";
@@ -432,9 +479,18 @@ namespace DungeonHunter.UI
                     ? (0.4f + 0.15f * Mathf.Sin(Time.unscaledTime * 6f)) * Mathf.Clamp01(0.5f + (0.3f - hp) / 0.3f)
                     : 0f;
                 vignette.color = new Color(0.85f, 0f, 0.05f, Mathf.Clamp01(damageFlash * 0.95f + lowPulse));
-                hpFill.GetComponent<Image>().color = hp < 0.3f
+                healFlash = Mathf.MoveTowards(healFlash, 0f, dt * 1.5f);
+                Color hpColor = hp < 0.3f
                     ? Color.Lerp(UIKit.HpRed, Color.white, 0.25f + 0.25f * Mathf.Sin(Time.unscaledTime * 8f))
                     : UIKit.HpRed;
+                hpFill.GetComponent<Image>().color = Color.Lerp(hpColor, new Color(0.45f, 1f, 0.55f), healFlash);
+            }
+
+            if (playerController != null)
+            {
+                float ready = playerController.DodgeReady01;
+                UIKit.SetBar(dodgeFill, ready);
+                dodgeLabel.color = ready >= 1f ? new Color(0.6f, 0.9f, 1f) : UIKit.TextDim;
             }
 
             bool hasKey = gm.HasKey;
@@ -496,19 +552,27 @@ namespace DungeonHunter.UI
                 bossChipValue = Mathf.MoveTowards(bossChipValue, hp, dt * 0.6f);
             UIKit.SetBar(bossChip, bossChipValue);
 
-            if (guardian.IsEnraged)
+            if (guardian.Phase == 3)
             {
-                bossPhase.text = "PHASE 2  ·  ENRAGED";
+                bossPhase.text = "PHASE 3  ·  ENRAGED" + MinionSuffix();
                 bossPhase.color = Color.Lerp(new Color(1f, 0.4f, 0.9f), Color.white, 0.3f + 0.3f * Mathf.Sin(Time.unscaledTime * 6f));
                 bossFillImage.color = new Color(0.85f, 0.25f, 0.75f);
             }
+            else if (guardian.Phase == 2)
+            {
+                bossPhase.text = "PHASE 2  ·  NECROMANCER" + MinionSuffix();
+                bossPhase.color = new Color(0.45f, 1f, 0.65f);
+                bossFillImage.color = new Color(0.35f, 0.75f, 0.55f);
+            }
             else
             {
-                bossPhase.text = "PHASE 1";
+                bossPhase.text = "PHASE 1  ·  WARDEN" + MinionSuffix();
                 bossPhase.color = UIKit.TextLight;
                 bossFillImage.color = UIKit.BossPurple;
             }
         }
+
+        private string MinionSuffix() => guardian.AliveMinions > 0 ? $"   ·  MINION ×{guardian.AliveMinions}" : "";
 
         private void UpdateEnemyBars()
         {

@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace DungeonHunter
 {
-    public enum MusicMode { Menu, Explore, Tension, Combat, Boss, BossPhase2, Ending }
+    public enum MusicMode { Menu, Explore, Tension, Combat, Boss, BossPhase2, BossPhase3, Ending }
 
     /// <summary>
     /// MUSIK ADAPTIF — musik membaca kondisi AI.
@@ -119,7 +119,8 @@ namespace DungeonHunter
                 case MusicMode.Tension: tExplore = 0.85f; tCombat = 0.4f; break;
                 case MusicMode.Combat: tExplore = 0.55f; tCombat = 1f; break;
                 case MusicMode.Boss: tExplore = 0.35f; tBoss = 1f; break;
-                case MusicMode.BossPhase2: tExplore = 0.3f; tBoss = 1f; tBoss2 = 1f; break;
+                case MusicMode.BossPhase2: tExplore = 0.3f; tBoss = 1f; tCombat = 0.7f; break;
+                case MusicMode.BossPhase3: tExplore = 0.3f; tBoss = 1f; tBoss2 = 1f; break;
                 case MusicMode.Ending:
                     // setelah stinger selesai, ambience explore kembali pelan di layar akhir
                     tExplore = Time.unscaledTime - endingTime > 8f ? 0.4f : 0f;
@@ -196,7 +197,7 @@ namespace DungeonHunter
                 lastCombatTime = Time.time;
 
             if (GuardianEngaged())
-                Mode = guardian.IsEnraged ? MusicMode.BossPhase2 : MusicMode.Boss;
+                Mode = guardian.Phase == 3 ? MusicMode.BossPhase3 : guardian.Phase == 2 ? MusicMode.BossPhase2 : MusicMode.Boss;
             else if (chasing > 0 || Time.time - lastCombatTime < combatHoldTime)
                 Mode = MusicMode.Combat;
             else if (suspicious > 0)
@@ -227,7 +228,8 @@ namespace DungeonHunter
                         return ChasingEnemies > 0 ? $"COMBAT ({ChasingEnemies} AI mengejar)" : "COMBAT (mereda...)";
                     case MusicMode.Tension: return $"TENSION ({SuspiciousEnemies} AI curiga)";
                     case MusicMode.Boss: return "BOSS (Guardian bertarung)";
-                    case MusicMode.BossPhase2: return "BOSS PHASE 2 (Enrage)";
+                    case MusicMode.BossPhase2: return "BOSS PHASE 2 (Necromancer)";
+                    case MusicMode.BossPhase3: return "BOSS PHASE 3 (Enrage)";
                     default: return Mode.ToString().ToUpper();
                 }
             }

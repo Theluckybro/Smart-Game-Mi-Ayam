@@ -43,8 +43,8 @@ namespace DungeonHunter.EditorTools
 
         private class ControllerSpec
         {
-            public string Idle, Walk, Run, Attack, Attack2, Hit, Death, Taunt;
-            public float AttackSpeed = 1f, Attack2Speed = 1f;
+            public string Idle, Walk, Run, Attack, Attack2, Hit, Death, Taunt, Dodge;
+            public float AttackSpeed = 1f, Attack2Speed = 1f, DodgeSpeed = 1f;
             public float WalkSpeed = 1.8f, RunSpeed = 4.5f;
         }
 
@@ -54,7 +54,8 @@ namespace DungeonHunter.EditorTools
             {
                 Idle = "Idle_A", Walk = "Walking_A", Run = "Running_A",
                 Attack = "Melee_1H_Attack_Slice_Horizontal", AttackSpeed = 1.8f,
-                Hit = "Hit_A", Death = "Death_A", WalkSpeed = 2.5f, RunSpeed = 6f
+                Hit = "Hit_A", Death = "Death_A", WalkSpeed = 2.5f, RunSpeed = 6f,
+                Dodge = "Dodge_Forward", DodgeSpeed = 2.2f
             },
             ["SkeletonMelee"] = new ControllerSpec
             {
@@ -123,6 +124,8 @@ namespace DungeonHunter.EditorTools
             AddMaterial("Skeleton", "skeleton_texture.png", Color.white);
             AddMaterial("SkeletonGuardian", "skeleton_texture.png", new Color(0.78f, 0.6f, 1f));
             AddMaterial("Dungeon", "dungeon_texture.png", Color.white);
+            AddMaterial("Potion", "dungeon_texture.png", new Color(1f, 0.4f, 0.42f));
+            Materials["Potion"].SetColor("_EmissionColor", new Color(0.35f, 0.02f, 0.04f));
         }
 
         private static void AddMaterial(string key, string texture, Color tint)
@@ -185,7 +188,7 @@ namespace DungeonHunter.EditorTools
         /// <summary>
         /// Layer tunggal:
         ///   Locomotion (blend tree Speed: idle → walk → run)
-        ///   Any State → Attack / Attack2 / Hit / Taunt (trigger) → kembali ke Locomotion
+        ///   Any State → Attack / Attack2 / Hit / Taunt / Dodge (trigger) → kembali ke Locomotion
         ///   Any State → Death (bool Dead), tanpa keluar
         /// </summary>
         private static AnimatorController BuildController(string name, ControllerSpec spec)
@@ -200,6 +203,7 @@ namespace DungeonHunter.EditorTools
             controller.AddParameter("Attack2", AnimatorControllerParameterType.Trigger);
             controller.AddParameter("Hit", AnimatorControllerParameterType.Trigger);
             controller.AddParameter("Taunt", AnimatorControllerParameterType.Trigger);
+            controller.AddParameter("Dodge", AnimatorControllerParameterType.Trigger);
             controller.AddParameter("Dead", AnimatorControllerParameterType.Bool);
 
             AnimatorStateMachine sm = controller.layers[0].stateMachine;
@@ -217,6 +221,7 @@ namespace DungeonHunter.EditorTools
             AddActionState(sm, locomotion, "Attack2", Clip(spec.Attack2), spec.Attack2Speed);
             AddActionState(sm, locomotion, "Hit", Clip(spec.Hit), 1.3f);
             AddActionState(sm, locomotion, "Taunt", Clip(spec.Taunt), 1f);
+            AddActionState(sm, locomotion, "Dodge", Clip(spec.Dodge), spec.DodgeSpeed);
 
             AnimatorState death = sm.AddState("Death");
             death.motion = Clip(spec.Death);
