@@ -272,20 +272,15 @@ namespace DungeonHunter.UI
             UIKit.AddImage(UIKit.Stretch("Backdrop", m), null, new Color(0.02f, 0.01f, 0.04f, 0.5f));
             UIKit.AddImage(UIKit.Stretch("Vignette", m), UIKit.VignetteSprite, new Color(0f, 0f, 0f, 0.85f));
 
-            titleGlow = UIKit.AddImage(UIKit.NewRect("TitleGlow", m, new Vector2(0.5f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, -220f), new Vector2(1500f, 520f)),
+            titleGlow = UIKit.AddImage(UIKit.NewRect("TitleGlow", m, new Vector2(0.5f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, -270f), new Vector2(1500f, 520f)),
                 UIKit.GlowSprite, new Color(1f, 0.6f, 0.2f, 0.22f));
 
-            Text title = UIKit.Label("Title", m, new Vector2(0.5f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, -210f), new Vector2(1500f, 140f),
-                "DUNGEON HUNTER", 112, UIKit.Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
+            Text title = UIKit.Label("Title", m, new Vector2(0.5f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, -270f), new Vector2(1500f, 160f),
+                "CRYPTBORNE", 136, UIKit.Gold, TextAnchor.MiddleCenter, FontStyle.Bold);
             var outline = title.gameObject.AddComponent<Outline>();
             outline.effectColor = new Color(0.25f, 0.1f, 0.02f, 1f);
             outline.effectDistance = new Vector2(3f, -3f);
             titleRt = (RectTransform)title.transform;
-
-            UIKit.Label("Subtitle", m, new Vector2(0.5f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, -305f), new Vector2(1200f, 40f),
-                "I N T E L L I G E N T     E N E M Y     D U N G E O N", 26, UIKit.TextLight, TextAnchor.MiddleCenter, FontStyle.Bold);
-            UIKit.Label("Tag", m, new Vector2(0.5f, 1f), new Vector2(0.5f, 0.5f), new Vector2(0f, -350f), new Vector2(1200f, 30f),
-                "UTS Game Cerdas  ·  Topik 3", 20, UIKit.TextDim, TextAnchor.MiddleCenter);
 
             UIKit.MakeButton("Play", m, new Vector2(0.5f, 0.5f), new Vector2(0f, -40f), new Vector2(400f, 70f), "MULAI", () => gm?.StartGame(), 30);
             UIKit.MakeButton("HowTo", m, new Vector2(0.5f, 0.5f), new Vector2(0f, -126f), new Vector2(400f, 70f), "CARA BERMAIN", () => OpenHowTo(true), 30);
@@ -293,8 +288,6 @@ namespace DungeonHunter.UI
 
             UIKit.Label("Credit", m, Vector2.zero, Vector2.zero, new Vector2(28f, 20f), new Vector2(900f, 26f),
                 "Aset 3D & animasi: KayKit oleh Kay Lousberg (CC0)", 17, UIKit.TextDim);
-            UIKit.Label("Tech", m, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-28f, 20f), new Vector2(900f, 26f),
-                "Unity 6  ·  URP  ·  NavMesh  ·  FSM + Behavior Tree", 17, UIKit.TextDim, TextAnchor.MiddleRight);
         }
 
         private void BuildHowTo()
