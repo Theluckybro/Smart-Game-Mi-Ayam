@@ -938,10 +938,14 @@ MonoBehaviour:
   seed: 12345
   player: {fileID: 532644979}
   generatedRoot: {fileID: 1154381793}
+  zoneName: Default Zone
   spawnAreaSize: {x: 24, y: 24}
   spawnY: 0.5
   enemyCount: 12
   itemCount: 8
+  useDifficultyBudget: 0
+  difficultyBudget: 20
+  remainingDifficultyBudget: 0
   minDistanceFromPlayer: 5
   checkRadius: 0.75
   minimumSpacing: 1.5
@@ -949,30 +953,52 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   maxAttemptsPerObject: 50
+  useNavMeshValidation: 1
+  navMeshSampleRadius: 2
+  navMeshAreaMask: -1
   enemyEntries:
   - name: Enemy Red
     prefab: {fileID: 2056380611709252148, guid: fa7e9f4fd949b144689aca95fa34148f, type: 3}
     weight: 60
+    yOffset: 0
+    randomYRotation: 1
+    difficultyCost: 1
   - name: Enemy Blue
     prefab: {fileID: 3170341387976488168, guid: 5bd9cc5e32c60294586e9e5ea795a161, type: 3}
     weight: 30
+    yOffset: 0
+    randomYRotation: 1
+    difficultyCost: 1
   - name: Enemy Yellow
     prefab: {fileID: 9097682707648619829, guid: f5fef942a56234a4b9306b7b2559c568, type: 3}
     weight: 10
+    yOffset: 0
+    randomYRotation: 1
+    difficultyCost: 1
   itemEntries:
   - name: Item Coin
     prefab: {fileID: 4426805650117894668, guid: 9f5bb5a0107bcc640b36361c6c907bb9, type: 3}
     weight: 70
+    yOffset: 0
+    randomYRotation: 1
+    difficultyCost: 1
   - name: Item Health
     prefab: {fileID: 156408511511875749, guid: 8c8012d41c509204894c99c5a5ab9b8a, type: 3}
     weight: 25
+    yOffset: 0
+    randomYRotation: 1
+    difficultyCost: 1
   - name: Item Rare
     prefab: {fileID: 9200440272617133171, guid: 6d0bf23f73322a24080fcb081d63f760, type: 3}
     weight: 5
+    yOffset: 0
+    randomYRotation: 1
+    difficultyCost: 1
   currentSeed: 0
   successfulEnemySpawns: 0
   successfulItemSpawns: 0
   rejectedPositions: 0
+  totalEnemyDifficulty: 0
 --- !u!4 &1306893852
 Transform:
   m_ObjectHideFlags: 0
@@ -1100,6 +1126,70 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1556489524}
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+--- !u!1 &1760524171
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1760524173}
+  - component: {fileID: 1760524172}
+  m_Layer: 0
+  m_Name: Navmesh
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1760524172
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1760524171}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7a5ac11cc976e418e8d13136b07e1f52, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.AI.Navigation::Unity.AI.Navigation.NavMeshSurface
+  m_SerializedVersion: 0
+  m_AgentTypeID: 0
+  m_CollectObjects: 0
+  m_Size: {x: 10, y: 10, z: 10}
+  m_Center: {x: 0, y: 2, z: 0}
+  m_LayerMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  m_UseGeometry: 0
+  m_DefaultArea: 0
+  m_GenerateLinks: 0
+  m_IgnoreNavMeshAgent: 1
+  m_IgnoreNavMeshObstacle: 1
+  m_OverrideTileSize: 0
+  m_TileSize: 256
+  m_OverrideVoxelSize: 0
+  m_VoxelSize: 0.16666667
+  m_MinRegionArea: 2
+  m_NavMeshData: {fileID: 23800000, guid: 4ec806be9bfeee44a8215e4d57f8ba4a, type: 2}
+  m_BuildHeightMesh: 0
+--- !u!4 &1760524173
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1760524171}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -0.30371, y: -0, z: -1.6166}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1778319233
 GameObject:
   m_ObjectHideFlags: 0
@@ -1258,3 +1348,4 @@ SceneRoots:
   - {fileID: 1778319234}
   - {fileID: 1154381793}
   - {fileID: 1306893852}
+  - {fileID: 1760524173}
