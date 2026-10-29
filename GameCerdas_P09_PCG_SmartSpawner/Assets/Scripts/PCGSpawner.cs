@@ -5,6 +5,22 @@ using UnityEngine.AI;
 
 public class PCGSpawner : MonoBehaviour
 {
+    public enum EnemyColor
+    {
+        None,
+        Red,
+        Blue,
+        Yellow
+    }
+
+    public enum ItemRarity
+    {
+        Common,
+        Uncommon,
+        Rare,
+        Legendary
+    }
+
     [System.Serializable]
     public class SpawnEntry
     {
@@ -18,6 +34,12 @@ public class PCGSpawner : MonoBehaviour
         public float yOffset = 0f;
         public bool randomYRotation = true;
 
+        [Header("Enemy Statistics")]
+        public EnemyColor enemyColor = EnemyColor.None;
+
+        [Header("Item Rarity")]
+        public ItemRarity itemRarity = ItemRarity.Common;
+
         [Header("Difficulty")]
         [Min(0)]
         public int difficultyCost = 1;
@@ -29,6 +51,12 @@ public class PCGSpawner : MonoBehaviour
 
     [SerializeField]
     private int seed = 12345;
+
+    [SerializeField]
+    private int seedHistoryLimit = 5;
+
+    [SerializeField]
+    private List<int> seedHistory = new List<int>();
 
     [Header("References")]
     [SerializeField]
@@ -116,6 +144,29 @@ public class PCGSpawner : MonoBehaviour
     [SerializeField]
     private int totalEnemyDifficulty;
 
+    [Header("Enemy Color Statistics")]
+    [SerializeField]
+    private int redCount;
+
+    [SerializeField]
+    private int blueCount;
+
+    [SerializeField]
+    private int yellowCount;
+
+    [Header("Item Rarity Statistics")]
+    [SerializeField]
+    private int commonCount;
+
+    [SerializeField]
+    private int uncommonCount;
+
+    [SerializeField]
+    private int rareCount;
+
+    [SerializeField]
+    private int legendaryCount;
+
     private readonly List<Vector3> usedPositions =
         new List<Vector3>();
 
@@ -137,6 +188,11 @@ public class PCGSpawner : MonoBehaviour
 
     public void Generate()
     {
+        GenerateWithEnemyCount(enemyCount);
+    }
+
+    private void GenerateWithEnemyCount(int requestedEnemyCount)
+    {
         ClearGeneratedObjects();
         usedPositions.Clear();
 
@@ -144,6 +200,15 @@ public class PCGSpawner : MonoBehaviour
         successfulItemSpawns = 0;
         rejectedPositions = 0;
         totalEnemyDifficulty = 0;
+
+        redCount = 0;
+        blueCount = 0;
+        yellowCount = 0;
+
+        commonCount = 0;
+        uncommonCount = 0;
+        rareCount = 0;
+        legendaryCount = 0;
 
         remainingDifficultyBudget = difficultyBudget;
 
@@ -154,20 +219,40 @@ public class PCGSpawner : MonoBehaviour
 
         currentSeed = seed;
         Random.InitState(currentSeed);
+        AddSeedToHistory(currentSeed);
 
-        SpawnGroup(enemyEntries, enemyCount, true);
+        SpawnGroup(enemyEntries, requestedEnemyCount, true);
         SpawnGroup(itemEntries, itemCount, false);
 
         Debug.Log(
             $"PCG Generation Complete | " +
             $"Zone: {zoneName} | " +
             $"Seed: {currentSeed} | " +
-            $"Enemies: {successfulEnemySpawns}/{enemyCount} | " +
+            $"Enemies: {successfulEnemySpawns}/{requestedEnemyCount} | " +
             $"Items: {successfulItemSpawns}/{itemCount} | " +
+            $"Red: {redCount} | Blue: {blueCount} | " +
+            $"Yellow: {yellowCount} | " +
             $"Difficulty: {totalEnemyDifficulty}/" +
             $"{(useDifficultyBudget ? difficultyBudget : -1)} | " +
             $"Rejected Positions: {rejectedPositions}"
         );
+
+        Debug.Log(
+            $"Item Rarity | Common: {commonCount} | " +
+            $"Uncommon: {uncommonCount} | " +
+            $"Rare: {rareCount} | Legendary: {legendaryCount}"
+        );
+    }
+
+    private void AddSeedToHistory(int newSeed)
+    {
+        seedHistory.Remove(newSeed);
+        seedHistory.Insert(0, newSeed);
+
+        while (seedHistory.Count > Mathf.Max(1, seedHistoryLimit))
+        {
+            seedHistory.RemoveAt(seedHistory.Count - 1);
+        }
     }
 
     private void SpawnGroup(
@@ -255,8 +340,7 @@ public class PCGSpawner : MonoBehaviour
                     }
                 }
 
-                GameObject selectedPrefab =
-                    selectedEntry.prefab;
+                GameObject selectedPrefab = selectedEntry.prefab;
 
                 Quaternion rotation = Quaternion.identity;
 
@@ -297,10 +381,18 @@ public class PCGSpawner : MonoBehaviour
                         remainingDifficultyBudget -=
                             selectedEntry.difficultyCost;
                     }
+
+                    CountEnemyColor(selectedEntry.enemyColor);
                 }
                 else
                 {
                     successfulItemSpawns++;
+
+                    CountItemRarity(selectedEntry.itemRarity);
+                    ApplyRarityVisual(
+                        spawnedObject,
+                        selectedEntry.itemRarity
+                    );
                 }
 
                 spawned = true;
@@ -315,6 +407,99 @@ public class PCGSpawner : MonoBehaviour
                     $"{maxAttemptsPerObject} attempts."
                 );
             }
+        }
+    }
+
+    private void CountEnemyColor(EnemyColor color)
+    {
+        switch (color)
+        {
+            case EnemyColor.Red:
+                redCount++;
+                break;
+
+            case EnemyColor.Blue:
+                blueCount++;
+                break;
+
+            case EnemyColor.Yellow:
+                yellowCount++;
+                break;
+        }
+    }
+
+    private void CountItemRarity(ItemRarity rarity)
+    {
+        switch (rarity)
+        {
+            case ItemRarity.Common:
+                commonCount++;
+                break;
+
+            case ItemRarity.Uncommon:
+                uncommonCount++;
+                break;
+
+            case ItemRarity.Rare:
+                rareCount++;
+                break;
+
+            case ItemRarity.Legendary:
+                legendaryCount++;
+                break;
+        }
+    }
+
+    private void ApplyRarityVisual(
+        GameObject spawnedObject,
+        ItemRarity rarity)
+    {
+        Color rarityColor;
+
+        switch (rarity)
+        {
+            case ItemRarity.Common:
+                rarityColor = Color.white;
+                break;
+
+            case ItemRarity.Uncommon:
+                rarityColor = Color.green;
+                break;
+
+            case ItemRarity.Rare:
+                rarityColor = Color.blue;
+                break;
+
+            case ItemRarity.Legendary:
+                rarityColor = new Color(1f, 0.65f, 0f);
+                break;
+
+            default:
+                rarityColor = Color.white;
+                break;
+        }
+
+        Renderer[] renderers =
+            spawnedObject.GetComponentsInChildren<Renderer>();
+
+        MaterialPropertyBlock propertyBlock =
+            new MaterialPropertyBlock();
+
+        foreach (Renderer itemRenderer in renderers)
+        {
+            itemRenderer.GetPropertyBlock(propertyBlock);
+
+            propertyBlock.SetColor(
+                "_BaseColor",
+                rarityColor
+            );
+
+            propertyBlock.SetColor(
+                "_Color",
+                rarityColor
+            );
+
+            itemRenderer.SetPropertyBlock(propertyBlock);
         }
     }
 
@@ -448,45 +633,111 @@ public class PCGSpawner : MonoBehaviour
     private void OnGUI()
     {
         GUI.Box(
-            new Rect(10, 10, 400, 250),
+            new Rect(10, 10, 310, 490),
             $"PCG Debug - {zoneName}"
         );
 
         GUI.Label(
-            new Rect(25, 40, 370, 25),
+            new Rect(25, 40, 280, 20),
             $"Seed: {currentSeed}"
         );
 
         GUI.Label(
-            new Rect(25, 65, 370, 25),
-            $"Enemy: {successfulEnemySpawns}/{enemyCount}"
+            new Rect(25, 62, 280, 20),
+            $"Enemy: {successfulEnemySpawns}"
         );
 
         GUI.Label(
-            new Rect(25, 90, 370, 25),
-            $"Item: {successfulItemSpawns}/{itemCount}"
+            new Rect(25, 84, 280, 20),
+            $"Item: {successfulItemSpawns}"
         );
 
         GUI.Label(
-            new Rect(25, 115, 370, 25),
+            new Rect(25, 106, 280, 20),
             $"Difficulty Used: {totalEnemyDifficulty}"
         );
 
         GUI.Label(
-            new Rect(25, 140, 370, 25),
+            new Rect(25, 128, 280, 20),
             $"Budget Remaining: " +
             $"{(useDifficultyBudget ? remainingDifficultyBudget : -1)}"
         );
 
         GUI.Label(
-            new Rect(25, 165, 370, 25),
-            $"Rejected Positions: {rejectedPositions}"
+            new Rect(25, 158, 280, 20),
+            "--- Enemy Color Statistics ---"
         );
 
         GUI.Label(
-            new Rect(25, 200, 370, 25),
-            "Press R to regenerate"
+            new Rect(25, 180, 280, 20),
+            $"Red: {redCount} | Blue: {blueCount}"
         );
+
+        GUI.Label(
+            new Rect(25, 202, 280, 20),
+            $"Yellow: {yellowCount}"
+        );
+
+        GUI.Label(
+            new Rect(25, 232, 280, 20),
+            "--- Item Rarity Statistics ---"
+        );
+
+        GUI.Label(
+            new Rect(25, 254, 280, 20),
+            $"Common: {commonCount}"
+        );
+
+        GUI.Label(
+            new Rect(25, 276, 280, 20),
+            $"Uncommon: {uncommonCount}"
+        );
+
+        GUI.Label(
+            new Rect(25, 298, 280, 20),
+            $"Rare: {rareCount} | Legendary: {legendaryCount}"
+        );
+
+        GUI.Label(
+            new Rect(25, 328, 280, 20),
+            "--- Enemy Count Experiments ---"
+        );
+
+        if (GUI.Button(new Rect(25, 350, 80, 25), "100"))
+        {
+            GenerateWithEnemyCount(100);
+        }
+
+        if (GUI.Button(new Rect(115, 350, 80, 25), "500"))
+        {
+            GenerateWithEnemyCount(500);
+        }
+
+        if (GUI.Button(new Rect(205, 350, 80, 25), "1000"))
+        {
+            GenerateWithEnemyCount(1000);
+        }
+
+        GUI.Label(
+            new Rect(25, 382, 280, 20),
+            "--- Recent Seeds ---"
+        );
+
+        int displayedSeeds = Mathf.Min(seedHistory.Count, 5);
+
+        for (int i = 0; i < displayedSeeds; i++)
+        {
+            int historySeed = seedHistory[i];
+
+            if (GUI.Button(
+                new Rect(25, 404 + i * 25, 260, 22),
+                $"Replay Seed: {historySeed}"))
+            {
+                seed = historySeed;
+                useRandomSeed = false;
+                Generate();
+            }
+        }
     }
 
     private void OnDrawGizmosSelected()

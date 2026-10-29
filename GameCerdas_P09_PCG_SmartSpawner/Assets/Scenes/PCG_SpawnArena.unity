@@ -936,6 +936,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::PCGSpawner
   useRandomSeed: 0
   seed: 12345
+  seedHistoryLimit: 5
+  seedHistory: 
   player: {fileID: 532644979}
   generatedRoot: {fileID: 1154381793}
   zoneName: Default Zone
@@ -962,18 +964,24 @@ MonoBehaviour:
     weight: 60
     yOffset: 0
     randomYRotation: 1
+    enemyColor: 1
+    itemRarity: 0
     difficultyCost: 1
   - name: Enemy Blue
     prefab: {fileID: 3170341387976488168, guid: 5bd9cc5e32c60294586e9e5ea795a161, type: 3}
     weight: 30
     yOffset: 0
     randomYRotation: 1
+    enemyColor: 2
+    itemRarity: 0
     difficultyCost: 1
   - name: Enemy Yellow
     prefab: {fileID: 9097682707648619829, guid: f5fef942a56234a4b9306b7b2559c568, type: 3}
     weight: 10
     yOffset: 0
     randomYRotation: 1
+    enemyColor: 3
+    itemRarity: 0
     difficultyCost: 1
   itemEntries:
   - name: Item Coin
@@ -981,24 +989,37 @@ MonoBehaviour:
     weight: 70
     yOffset: 0
     randomYRotation: 1
+    enemyColor: 0
+    itemRarity: 0
     difficultyCost: 1
   - name: Item Health
     prefab: {fileID: 156408511511875749, guid: 8c8012d41c509204894c99c5a5ab9b8a, type: 3}
     weight: 25
     yOffset: 0
     randomYRotation: 1
+    enemyColor: 0
+    itemRarity: 1
     difficultyCost: 1
   - name: Item Rare
     prefab: {fileID: 9200440272617133171, guid: 6d0bf23f73322a24080fcb081d63f760, type: 3}
     weight: 5
     yOffset: 0
     randomYRotation: 1
+    enemyColor: 0
+    itemRarity: 2
     difficultyCost: 1
   currentSeed: 0
   successfulEnemySpawns: 0
   successfulItemSpawns: 0
   rejectedPositions: 0
   totalEnemyDifficulty: 0
+  redCount: 0
+  blueCount: 0
+  yellowCount: 0
+  commonCount: 0
+  uncommonCount: 0
+  rareCount: 0
+  legendaryCount: 0
 --- !u!4 &1306893852
 Transform:
   m_ObjectHideFlags: 0
