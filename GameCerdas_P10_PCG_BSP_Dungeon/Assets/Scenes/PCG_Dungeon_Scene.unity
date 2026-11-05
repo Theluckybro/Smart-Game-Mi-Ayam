@@ -444,6 +444,18 @@ PrefabInstance:
       propertyPath: m_Name
       value: DungeonGenerator
       objectReference: {fileID: 0}
+    - target: {fileID: 1555079190447227425, guid: 97ae30b675495ff41801d52c55031f92, type: 3}
+      propertyPath: seed
+      value: 999
+      objectReference: {fileID: 0}
+    - target: {fileID: 1555079190447227425, guid: 97ae30b675495ff41801d52c55031f92, type: 3}
+      propertyPath: randomSeed
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 1555079190447227425, guid: 97ae30b675495ff41801d52c55031f92, type: 3}
+      propertyPath: cameraScene
+      value: 
+      objectReference: {fileID: 330585543}
     - target: {fileID: 5347155334685127221, guid: 97ae30b675495ff41801d52c55031f92, type: 3}
       propertyPath: m_LocalPosition.x
       value: 0.43672
