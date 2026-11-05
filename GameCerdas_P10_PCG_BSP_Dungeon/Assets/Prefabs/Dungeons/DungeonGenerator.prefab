@@ -1,0 +1,64 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &1178243150856029287
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 5347155334685127221}
+  - component: {fileID: 1555079190447227425}
+  m_Layer: 0
+  m_Name: DungeonGenerator
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &5347155334685127221
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1178243150856029287}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0.43672, y: 0.85347, z: -1.35544}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1555079190447227425
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1178243150856029287}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 64756a98493c6c648ba7ca8e2d93c513, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DungeonGenerator
+  mapWidth: 60
+  mapHeight: 40
+  tileSize: 1
+  minLeafSize: 12
+  maxLeafSize: 20
+  minRoomSize: 5
+  roomMargin: 2
+  seed: 12345
+  randomSeed: 0
+  floorPrefab: {fileID: 948828063065537398, guid: 6374eee7663ab8b4e8641dfcb88f4216, type: 3}
+  wallPrefab: {fileID: 7922069384295026427, guid: cb930ba37d0543348875f809f20f40e7, type: 3}
+  goalPrefab: {fileID: 1152637027139707277, guid: 663fa7245826e1a49a41f426901b85db, type: 3}
+  playerPrefab: {fileID: 5469319053442522298, guid: 522f4ca0086b5fe4985b5fc4b06e6c7e, type: 3}
+  enemyPrefab: {fileID: 6858076950039983590, guid: 08c57173eeca67947be09c50c6fdb372, type: 3}
+  itemPrefab: {fileID: 5139034637722898292, guid: f74cc224d502eac4790eeb1adc9b9f03, type: 3}
+  enemyCount: 8
+  itemCount: 5
+  safeRoomCount: 1
