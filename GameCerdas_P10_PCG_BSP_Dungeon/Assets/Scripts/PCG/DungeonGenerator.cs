@@ -25,6 +25,9 @@ public class DungeonGenerator : MonoBehaviour
 [SerializeField] private int seed = 12345;
 [SerializeField] private bool randomSeed = false;
 
+[Header("Validation")]
+[SerializeField] private int maxGenerateAttempts = 10;
+
 [Header("Prefabs")]
 [SerializeField] private GameObject floorPrefab;
 [SerializeField] private GameObject wallPrefab;
@@ -56,6 +59,12 @@ private Vector2Int goalPosition;
 private List<Vector2Int> enemyPositions = new List<Vector2Int>();
 private List<Vector2Int> itemPositions = new List<Vector2Int>();
 
+// Hasil generasi terakhir (dipakai log dan HUD)
+private int attemptsUsed;
+private bool dungeonValid;
+private string statusMessage = "";
+private List<Vector2Int> currentPath;
+
 // Riwayat seed untuk tombol Prev Seed (T)
 private List<int> seedHistory = new List<int>();
 
@@ -79,8 +88,56 @@ public void GenerateDungeon()
 {
     ClearDungeon();
 
-    // GenerateDungeon tidak mengubah seed, jadi seed sama = hasil sama
-    Random.InitState(seed);
+    dungeonValid = false;
+    attemptsUsed = 0;
+    currentPath = null;
+    statusMessage = "";
+
+    int maxAttempts = Mathf.Max(1, maxGenerateAttempts);
+
+    // Generate ulang dengan seed turunan (deterministik) sampai valid
+    for (int attempt = 0; attempt < maxAttempts; attempt++)
+    {
+        attemptsUsed = attempt + 1;
+
+        if (GenerateLayout(GetAttemptSeed(attempt)))
+        {
+            dungeonValid = true;
+            break;
+        }
+    }
+
+    if (dungeonValid)
+    {
+        statusMessage = "Valid";
+
+        BuildDungeon();
+
+        SpawnGameplayObjects();
+    }
+    else
+    {
+        statusMessage =
+            "GAGAL: dungeon valid tidak ditemukan setelah " +
+            attemptsUsed + " percobaan";
+
+        Debug.LogError(statusMessage);
+    }
+
+    LogGenerationSummary();
+}
+
+// Seed turunan per percobaan; langkah bilangan prima agar tidak
+// bertabrakan dengan seed + 1 milik tombol R
+private int GetAttemptSeed(int attempt)
+{
+    return unchecked(seed + attempt * 10007);
+}
+
+// Bagian logika saja (tanpa Instantiate): true bila layout valid
+private bool GenerateLayout(int attemptSeed)
+{
+    Random.InitState(attemptSeed);
 
     InitializeGrid();
 
@@ -92,20 +149,43 @@ public void GenerateDungeon()
 
     PlaceStartAndGoal();
 
-    if (!HasPathToGoal())
-    {
-        Debug.LogWarning(
-            "Dungeon tidak valid: Goal tidak dapat dicapai."
-        );
+    enemyPositions.Clear();
+    itemPositions.Clear();
 
-        return;
+    if (!ValidateDungeon())
+        return false;
+
+    PlaceObjectPositions();
+
+    return true;
+}
+
+private void LogGenerationSummary()
+{
+    int floorTiles = 0;
+
+    if (grid != null)
+    {
+        foreach (TileType tile in grid)
+        {
+            if (tile != TileType.Wall)
+                floorTiles++;
+        }
     }
 
-    BuildDungeon();
+    int pathLength =
+        currentPath != null ? currentPath.Count - 1 : -1;
 
-    SpawnGameplayObjects();
-
-    Debug.Log("Dungeon generated with seed: " + seed);
+    Debug.Log(
+        "[DungeonGen] seed=" + seed +
+        " attempts=" + attemptsUsed +
+        " rooms=" + rooms.Count +
+        " floorTiles=" + floorTiles +
+        " pathLength=" + pathLength +
+        " enemies=" + enemyPositions.Count +
+        " items=" + itemPositions.Count +
+        " valid=" + dungeonValid
+    );
 }
 
 private int NewRandomSeed()
@@ -612,8 +692,6 @@ private void CreateCorridors()
 
 private void SpawnGameplayObjects()
 {
-    PlaceObjectPositions();
-
     SpawnPlayer();
     SpawnEnemies();
     SpawnItems();
@@ -909,44 +987,60 @@ private bool ValidateDungeon()
 {
     if (rooms == null || rooms.Count < 2)
     {
-        Debug.LogWarning(
-            "Dungeon invalid: jumlah room terlalu sedikit."
-        );
-
-        return false;
+        return Fail("jumlah room terlalu sedikit");
     }
 
-    if (!IsInsideGrid(
-            startPosition.x,
-            startPosition.y))
+    if (!IsInsideGrid(startPosition.x, startPosition.y) ||
+        !IsInsideGrid(goalPosition.x, goalPosition.y))
     {
-        return false;
+        return Fail("start/goal di luar grid");
     }
 
-    if (!IsInsideGrid(
-            goalPosition.x,
-            goalPosition.y))
+    if (startPosition == goalPosition)
     {
-        return false;
+        return Fail("start dan goal sama");
+    }
+
+    // BFS: goal harus terjangkau dari start
+    currentPath = FindPath(startPosition, goalPosition, null);
+
+    if (currentPath == null)
+    {
+        return Fail("goal tidak dapat dicapai dari start");
+    }
+
+    // Flood fill: seluruh room harus terjangkau dari start
+    bool[,] reachable = FloodFill(startPosition);
+
+    foreach (DungeonRoom room in rooms)
+    {
+        Vector2Int center = room.Center;
+
+        if (!reachable[center.x, center.y])
+        {
+            return Fail("ada room yang tidak terjangkau dari start");
+        }
     }
 
     return true;
 }
 
-private bool HasPathToGoal()
+private bool Fail(string reason)
 {
-    bool[,] visited =
-        new bool[mapWidth, mapHeight];
+    Debug.LogWarning("Dungeon invalid: " + reason);
 
-    Queue<Vector2Int> queue =
-        new Queue<Vector2Int>();
+    return false;
+}
 
-    queue.Enqueue(startPosition);
+// Flood fill (4 arah) dari origin melalui tile non-Wall
+private bool[,] FloodFill(Vector2Int origin)
+{
+    bool[,] visited = new bool[mapWidth, mapHeight];
 
-    visited[
-        startPosition.x,
-        startPosition.y
-    ] = true;
+    Queue<Vector2Int> queue = new Queue<Vector2Int>();
+
+    queue.Enqueue(origin);
+    visited[origin.x, origin.y] = true;
 
     Vector2Int[] directions =
     {
@@ -958,52 +1052,28 @@ private bool HasPathToGoal()
 
     while (queue.Count > 0)
     {
-        Vector2Int current =
-            queue.Dequeue();
+        Vector2Int current = queue.Dequeue();
 
-        if (current == goalPosition)
+        foreach (Vector2Int direction in directions)
         {
-            return true;
-        }
+            Vector2Int next = current + direction;
 
-        foreach (Vector2Int direction
-                 in directions)
-        {
-            Vector2Int next =
-                current + direction;
-
-            if (!IsInsideGrid(
-                    next.x,
-                    next.y))
-            {
+            if (!IsInsideGrid(next.x, next.y))
                 continue;
-            }
 
-            if (visited[
-                    next.x,
-                    next.y])
-            {
+            if (visited[next.x, next.y])
                 continue;
-            }
 
-            if (grid[
-                    next.x,
-                    next.y]
-                == TileType.Wall)
-            {
+            if (grid[next.x, next.y] == TileType.Wall)
                 continue;
-            }
 
-            visited[
-                next.x,
-                next.y
-            ] = true;
+            visited[next.x, next.y] = true;
 
             queue.Enqueue(next);
         }
     }
 
-    return false;
+    return visited;
 }
 
 }
