@@ -46,17 +46,31 @@ private Transform levelRoot;
 private Vector2Int startPosition;
 private Vector2Int goalPosition;
 
+// Riwayat seed untuk tombol Prev Seed (T)
+private List<int> seedHistory = new List<int>();
+
 private void Start()
 {
+    // Seed acak hanya dipilih sekali saat awal bila randomSeed aktif
+    if (randomSeed)
+    {
+        seed = NewRandomSeed();
+    }
+
     GenerateDungeon();
-    cameraScene.transform.position = new Vector3(mapWidth/2, 45, mapHeight/2);
+
+    if (cameraScene != null)
+    {
+        cameraScene.transform.position = new Vector3(mapWidth/2, 45, mapHeight/2);
+    }
 }
 
 public void GenerateDungeon()
 {
     ClearDungeon();
 
-    SetupSeed();
+    // GenerateDungeon tidak mengubah seed, jadi seed sama = hasil sama
+    Random.InitState(seed);
 
     InitializeGrid();
 
@@ -84,22 +98,45 @@ public void GenerateDungeon()
     Debug.Log("Dungeon generated with seed: " + seed);
 }
 
-private void SetupSeed()
+private int NewRandomSeed()
 {
-    if (randomSeed)
-    {
-        seed = System.DateTime.Now.GetHashCode();
-    }
+    return new System.Random(
+        System.Environment.TickCount
+    ).Next(0, 1000000);
+}
 
-    Random.InitState(seed);
+// R: seed berikutnya (seed + 1, atau seed baru bila randomSeed aktif)
+public void NextSeed()
+{
+    seedHistory.Add(seed);
+
+    seed = randomSeed ? NewRandomSeed() : seed + 1;
+
+    GenerateDungeon();
+}
+
+// T: kembali ke seed sebelumnya
+public void PreviousSeed()
+{
+    if (seedHistory.Count == 0)
+        return;
+
+    seed = seedHistory[seedHistory.Count - 1];
+    seedHistory.RemoveAt(seedHistory.Count - 1);
+
+    GenerateDungeon();
 }
 
 private void Update()
 {
     if (Input.GetKeyDown(KeyCode.R))
     {
-        seed++;
-        GenerateDungeon();
+        NextSeed();
+    }
+
+    if (Input.GetKeyDown(KeyCode.T))
+    {
+        PreviousSeed();
     }
 }
 
