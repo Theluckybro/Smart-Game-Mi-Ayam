@@ -33,6 +33,8 @@ public class DungeonGenerator : MonoBehaviour
 [SerializeField] private int enemyCount = 8;
 [SerializeField] private int itemCount = 5;
 [SerializeField] private int safeRoomCount = 1;
+[SerializeField] private float safeRadius = 8f;
+[SerializeField] private int maxPlacementAttempts = 100;
 
 private TileType[,] grid;
 
@@ -45,6 +47,10 @@ private Transform levelRoot;
 
 private Vector2Int startPosition;
 private Vector2Int goalPosition;
+
+// Posisi (grid) enemy dan item yang berhasil ditempatkan
+private List<Vector2Int> enemyPositions = new List<Vector2Int>();
+private List<Vector2Int> itemPositions = new List<Vector2Int>();
 
 // Riwayat seed untuk tombol Prev Seed (T)
 private List<int> seedHistory = new List<int>();
@@ -586,6 +592,8 @@ private void CreateCorridors()
 
 private void SpawnGameplayObjects()
 {
+    PlaceObjectPositions();
+
     SpawnPlayer();
     SpawnEnemies();
     SpawnItems();
@@ -609,32 +617,72 @@ private void SpawnPlayer()
     );
 }
 
+// Tentukan posisi enemy dan item di data grid (belum instantiate)
+private void PlaceObjectPositions()
+{
+    enemyPositions.Clear();
+    itemPositions.Clear();
+
+    // Semua tile yang sudah terisi objek dianggap terblokir
+    HashSet<Vector2Int> occupied = new HashSet<Vector2Int>();
+
+    for (int i = 0; i < enemyCount; i++)
+    {
+        Vector2Int pos;
+
+        // Gagal setelah maxPlacementAttempts: lewati enemy ini
+        if (TryGetRandomFloorPosition(true, occupied, out pos))
+        {
+            enemyPositions.Add(pos);
+            occupied.Add(pos);
+        }
+    }
+
+    for (int i = 0; i < itemCount; i++)
+    {
+        Vector2Int pos;
+
+        if (TryGetRandomFloorPosition(false, occupied, out pos))
+        {
+            itemPositions.Add(pos);
+            occupied.Add(pos);
+        }
+    }
+
+    // Cek ulang: goal harus tetap terjangkau dengan semua objek terblokir
+    while (occupied.Count > 0 &&
+           FindPath(startPosition, goalPosition, occupied) == null)
+    {
+        if (enemyPositions.Count > 0)
+        {
+            Vector2Int removed = enemyPositions[enemyPositions.Count - 1];
+            enemyPositions.RemoveAt(enemyPositions.Count - 1);
+            occupied.Remove(removed);
+        }
+        else if (itemPositions.Count > 0)
+        {
+            Vector2Int removed = itemPositions[itemPositions.Count - 1];
+            itemPositions.RemoveAt(itemPositions.Count - 1);
+            occupied.Remove(removed);
+        }
+        else
+        {
+            break;
+        }
+    }
+}
+
 private void SpawnEnemies()
 {
     if (enemyPrefab == null)
         return;
 
-    for (int i = 0; i < enemyCount; i++)
+    for (int i = 0; i < enemyPositions.Count; i++)
     {
-        Vector2Int gridPosition =
-            GetRandomFloorPosition();
-
-        float distanceFromStart =
-            Vector2Int.Distance(
-                gridPosition,
-                startPosition
-            );
-
-        if (distanceFromStart < 8f)
-        {
-            i--;
-            continue;
-        }
-
         Vector3 worldPosition =
             GridToWorld(
-                gridPosition.x,
-                gridPosition.y
+                enemyPositions[i].x,
+                enemyPositions[i].y
             );
 
         GameObject enemy =
@@ -655,15 +703,12 @@ private void SpawnItems()
     if (itemPrefab == null)
         return;
 
-    for (int i = 0; i < itemCount; i++)
+    for (int i = 0; i < itemPositions.Count; i++)
     {
-        Vector2Int gridPosition =
-            GetRandomFloorPosition();
-
         Vector3 worldPosition =
             GridToWorld(
-                gridPosition.x,
-                gridPosition.y
+                itemPositions[i].x,
+                itemPositions[i].y
             );
 
         GameObject item =
@@ -679,22 +724,135 @@ private void SpawnItems()
     }
 }
 
-private Vector2Int GetRandomFloorPosition()
+// Zona aman: radius safeRadius dari start, dan safeRoomCount room pertama
+// (room start = rooms[0]) bebas dari enemy
+private bool IsInSafeZone(Vector2Int pos)
+{
+    if (Vector2Int.Distance(pos, startPosition) < safeRadius)
+        return true;
+
+    for (int i = 0; i < safeRoomCount && i < rooms.Count; i++)
+    {
+        DungeonRoom room = rooms[i];
+
+        if (pos.x >= room.x && pos.x < room.x + room.width &&
+            pos.y >= room.y && pos.y < room.y + room.height)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Cari tile Floor biasa (bukan Start/Goal) yang valid.
+// Mengembalikan false bila gagal, supaya objek tidak menumpuk di start.
+private bool TryGetRandomFloorPosition(
+    bool isEnemy,
+    HashSet<Vector2Int> occupied,
+    out Vector2Int result)
 {
     for (int attempt = 0;
-         attempt < 100;
+         attempt < maxPlacementAttempts;
          attempt++)
     {
         int x = Random.Range(1, mapWidth - 1);
         int y = Random.Range(1, mapHeight - 1);
 
-        if (grid[x, y] == TileType.Floor)
+        if (grid[x, y] != TileType.Floor)
+            continue;
+
+        Vector2Int candidate = new Vector2Int(x, y);
+
+        if (occupied.Contains(candidate))
+            continue;
+
+        if (isEnemy && IsInSafeZone(candidate))
+            continue;
+
+        // Tolak tile yang menutup jalur start ke goal (mis. koridor sempit)
+        occupied.Add(candidate);
+        bool blocksPath =
+            FindPath(startPosition, goalPosition, occupied) == null;
+        occupied.Remove(candidate);
+
+        if (blocksPath)
+            continue;
+
+        result = candidate;
+        return true;
+    }
+
+    result = Vector2Int.zero;
+    return false;
+}
+
+// BFS jalur terpendek (4 arah). Mengembalikan null bila tidak terjangkau.
+// Tile pada 'blocked' dianggap dinding.
+private List<Vector2Int> FindPath(
+    Vector2Int from,
+    Vector2Int to,
+    HashSet<Vector2Int> blocked)
+{
+    Vector2Int[,] parent = new Vector2Int[mapWidth, mapHeight];
+    bool[,] visited = new bool[mapWidth, mapHeight];
+
+    Queue<Vector2Int> queue = new Queue<Vector2Int>();
+
+    queue.Enqueue(from);
+    visited[from.x, from.y] = true;
+
+    Vector2Int[] directions =
+    {
+        Vector2Int.up,
+        Vector2Int.down,
+        Vector2Int.left,
+        Vector2Int.right
+    };
+
+    while (queue.Count > 0)
+    {
+        Vector2Int current = queue.Dequeue();
+
+        if (current == to)
         {
-            return new Vector2Int(x, y);
+            List<Vector2Int> path = new List<Vector2Int>();
+
+            for (Vector2Int p = to; p != from; p = parent[p.x, p.y])
+            {
+                path.Add(p);
+            }
+
+            path.Add(from);
+            path.Reverse();
+
+            return path;
+        }
+
+        foreach (Vector2Int direction in directions)
+        {
+            Vector2Int next = current + direction;
+
+            if (!IsInsideGrid(next.x, next.y))
+                continue;
+
+            if (visited[next.x, next.y])
+                continue;
+
+            if (grid[next.x, next.y] == TileType.Wall)
+                continue;
+
+            if (blocked != null && blocked.Contains(next))
+                continue;
+
+            visited[next.x, next.y] = true;
+            parent[next.x, next.y] = current;
+
+            queue.Enqueue(next);
         }
     }
 
-    return startPosition;
+    return null;
 }
 
 private void OnDrawGizmos()
