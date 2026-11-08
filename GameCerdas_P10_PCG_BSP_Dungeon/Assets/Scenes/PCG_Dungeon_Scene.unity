@@ -446,11 +446,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1555079190447227425, guid: 97ae30b675495ff41801d52c55031f92, type: 3}
       propertyPath: seed
-      value: 999
+      value: 12345
       objectReference: {fileID: 0}
     - target: {fileID: 1555079190447227425, guid: 97ae30b675495ff41801d52c55031f92, type: 3}
       propertyPath: randomSeed
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 1555079190447227425, guid: 97ae30b675495ff41801d52c55031f92, type: 3}
       propertyPath: cameraScene
