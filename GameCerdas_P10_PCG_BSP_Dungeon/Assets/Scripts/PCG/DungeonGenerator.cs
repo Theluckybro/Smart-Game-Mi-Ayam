@@ -17,6 +17,10 @@ public class DungeonGenerator : MonoBehaviour
 [SerializeField] private int minRoomSize = 5;
 [SerializeField] private int roomMargin = 2;
 
+[Header("Corridor Settings")]
+[Range(1, 3)]
+[SerializeField] private int corridorWidth = 1;
+
 [Header("Generation")]
 [SerializeField] private int seed = 12345;
 [SerializeField] private bool randomSeed = false;
@@ -399,11 +403,19 @@ private void CarveHorizontal(
     int start = Mathf.Min(x1, x2);
     int end = Mathf.Max(x1, x2);
 
+    // Lebar corridor: baris dipusatkan di sekitar y
+    int offset = (corridorWidth - 1) / 2;
+
     for (int x = start; x <= end; x++)
     {
-        if (IsInsideGrid(x, y))
+        for (int w = 0; w < corridorWidth; w++)
         {
-            grid[x, y] = TileType.Floor;
+            int yy = y - offset + w;
+
+            if (IsInsideGrid(x, yy))
+            {
+                grid[x, yy] = TileType.Floor;
+            }
         }
     }
 }
@@ -416,11 +428,19 @@ private void CarveVertical(
     int start = Mathf.Min(y1, y2);
     int end = Mathf.Max(y1, y2);
 
+    // Lebar corridor: kolom dipusatkan di sekitar x
+    int offset = (corridorWidth - 1) / 2;
+
     for (int y = start; y <= end; y++)
     {
-        if (IsInsideGrid(x, y))
+        for (int w = 0; w < corridorWidth; w++)
         {
-            grid[x, y] = TileType.Floor;
+            int xx = x - offset + w;
+
+            if (IsInsideGrid(xx, y))
+            {
+                grid[xx, y] = TileType.Floor;
+            }
         }
     }
 }
