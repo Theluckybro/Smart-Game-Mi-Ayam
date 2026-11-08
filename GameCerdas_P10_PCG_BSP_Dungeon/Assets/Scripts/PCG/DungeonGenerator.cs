@@ -28,6 +28,9 @@ public class DungeonGenerator : MonoBehaviour
 [Header("Validation")]
 [SerializeField] private int maxGenerateAttempts = 10;
 
+[Header("Debug")]
+[SerializeField] private bool showDebugOverlay = true;
+
 [Header("Prefabs")]
 [SerializeField] private GameObject floorPrefab;
 [SerializeField] private GameObject wallPrefab;
@@ -68,6 +71,14 @@ private bool goalReached;
 private bool dungeonValid;
 private string statusMessage = "";
 private List<Vector2Int> currentPath;
+
+// Bantuan visual (toggle F1): jalur BFS, start, goal, enemy, item
+private Transform debugRoot;
+private Material pathMaterial;
+private Material startMaterial;
+private Material goalMaterial;
+private Material enemyMaterial;
+private Material itemMaterial;
 
 // Riwayat seed untuk tombol Prev Seed (T)
 private List<int> seedHistory = new List<int>();
@@ -120,6 +131,8 @@ public void GenerateDungeon()
         BuildDungeon();
 
         SpawnGameplayObjects();
+
+        BuildDebugOverlay();
     }
     else
     {
@@ -241,7 +254,7 @@ private void OnGoalReached()
 private void OnGUI()
 {
     GUILayout.BeginArea(
-        new Rect(10, 10, 300, 330),
+        new Rect(10, 10, 300, 380),
         GUI.skin.box
     );
 
@@ -269,6 +282,12 @@ private void OnGUI()
     {
         NextSeed();
     }
+
+    showDebugOverlay =
+        GUILayout.Toggle(showDebugOverlay, "Debug Overlay (F1)");
+
+    GUILayout.Label("Cyan=jalur BFS  Hijau=start  Magenta=goal");
+    GUILayout.Label("Merah=enemy  Kuning=item");
 
     GUILayout.EndArea();
 
@@ -308,6 +327,18 @@ private void Update()
     if (Input.GetKeyDown(KeyCode.T))
     {
         PreviousSeed();
+    }
+
+    if (Input.GetKeyDown(KeyCode.F1))
+    {
+        showDebugOverlay = !showDebugOverlay;
+    }
+
+    // Sinkronkan overlay dengan toggle (F1 / Inspector / HUD)
+    if (debugRoot != null &&
+        debugRoot.gameObject.activeSelf != showDebugOverlay)
+    {
+        debugRoot.gameObject.SetActive(showDebugOverlay);
     }
 }
 
@@ -1032,6 +1063,105 @@ private List<Vector2Int> FindPath(
     }
 
     return null;
+}
+
+private void OnDestroy()
+{
+    Material[] materials =
+    {
+        pathMaterial, startMaterial, goalMaterial,
+        enemyMaterial, itemMaterial
+    };
+
+    foreach (Material material in materials)
+    {
+        if (material != null)
+        {
+            Destroy(material);
+        }
+    }
+}
+
+private Material CreateOverlayMaterial(Color color)
+{
+    Shader shader =
+        Shader.Find("Universal Render Pipeline/Unlit");
+
+    if (shader == null)
+    {
+        shader = Shader.Find("Sprites/Default");
+    }
+
+    Material material = new Material(shader);
+    material.color = color;
+
+    return material;
+}
+
+// Buat marker datar (quad berwarna) di atas floor
+private void CreateMarker(
+    Vector2Int gridPosition,
+    Material material,
+    float scale,
+    float height,
+    string markerName)
+{
+    GameObject marker =
+        GameObject.CreatePrimitive(PrimitiveType.Quad);
+
+    marker.name = markerName;
+
+    // Marker hanya visual, jangan ikut menghalangi player
+    DestroyImmediate(marker.GetComponent<Collider>());
+
+    marker.GetComponent<Renderer>().sharedMaterial = material;
+
+    marker.transform.SetParent(debugRoot);
+    marker.transform.position =
+        GridToWorld(gridPosition.x, gridPosition.y) +
+        Vector3.up * height;
+    marker.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
+    marker.transform.localScale =
+        new Vector3(scale * tileSize, scale * tileSize, 1f);
+}
+
+private void BuildDebugOverlay()
+{
+    if (pathMaterial == null)
+    {
+        pathMaterial = CreateOverlayMaterial(Color.cyan);
+        startMaterial = CreateOverlayMaterial(Color.green);
+        goalMaterial = CreateOverlayMaterial(Color.magenta);
+        enemyMaterial = CreateOverlayMaterial(Color.red);
+        itemMaterial = CreateOverlayMaterial(Color.yellow);
+    }
+
+    debugRoot = new GameObject("DebugOverlay").transform;
+    debugRoot.SetParent(levelRoot);
+
+    // Jalur BFS start ke goal (start dan goal diberi warna sendiri)
+    if (currentPath != null)
+    {
+        for (int i = 1; i < currentPath.Count - 1; i++)
+        {
+            CreateMarker(currentPath[i], pathMaterial, 0.4f, 0.08f, "Path");
+        }
+    }
+
+    CreateMarker(startPosition, startMaterial, 0.9f, 0.1f, "StartMarker");
+    CreateMarker(goalPosition, goalMaterial, 0.9f, 0.1f, "GoalMarker");
+
+    foreach (Vector2Int pos in enemyPositions)
+    {
+        CreateMarker(pos, enemyMaterial, 1f, 0.1f, "EnemyMarker");
+    }
+
+    foreach (Vector2Int pos in itemPositions)
+    {
+        CreateMarker(pos, itemMaterial, 0.9f, 0.1f, "ItemMarker");
+    }
+
+    debugRoot.gameObject.SetActive(showDebugOverlay);
 }
 
 private void OnDrawGizmos()
