@@ -61,6 +61,10 @@ private List<Vector2Int> itemPositions = new List<Vector2Int>();
 
 // Hasil generasi terakhir (dipakai log dan HUD)
 private int attemptsUsed;
+private int usedSeed;
+private int floorTileCount;
+private int pathLength;
+private bool goalReached;
 private bool dungeonValid;
 private string statusMessage = "";
 private List<Vector2Int> currentPath;
@@ -92,6 +96,7 @@ public void GenerateDungeon()
     attemptsUsed = 0;
     currentPath = null;
     statusMessage = "";
+    goalReached = false;
 
     int maxAttempts = Mathf.Max(1, maxGenerateAttempts);
 
@@ -99,8 +104,9 @@ public void GenerateDungeon()
     for (int attempt = 0; attempt < maxAttempts; attempt++)
     {
         attemptsUsed = attempt + 1;
+        usedSeed = GetAttemptSeed(attempt);
 
-        if (GenerateLayout(GetAttemptSeed(attempt)))
+        if (GenerateLayout(usedSeed))
         {
             dungeonValid = true;
             break;
@@ -162,25 +168,24 @@ private bool GenerateLayout(int attemptSeed)
 
 private void LogGenerationSummary()
 {
-    int floorTiles = 0;
+    floorTileCount = 0;
 
     if (grid != null)
     {
         foreach (TileType tile in grid)
         {
             if (tile != TileType.Wall)
-                floorTiles++;
+                floorTileCount++;
         }
     }
 
-    int pathLength =
-        currentPath != null ? currentPath.Count - 1 : -1;
+    pathLength = currentPath != null ? currentPath.Count - 1 : -1;
 
     Debug.Log(
         "[DungeonGen] seed=" + seed +
         " attempts=" + attemptsUsed +
         " rooms=" + rooms.Count +
-        " floorTiles=" + floorTiles +
+        " floorTiles=" + floorTileCount +
         " pathLength=" + pathLength +
         " enemies=" + enemyPositions.Count +
         " items=" + itemPositions.Count +
@@ -215,6 +220,82 @@ public void PreviousSeed()
     seedHistory.RemoveAt(seedHistory.Count - 1);
 
     GenerateDungeon();
+}
+
+private void OnEnable()
+{
+    GoalTrigger.GoalReached += OnGoalReached;
+}
+
+private void OnDisable()
+{
+    GoalTrigger.GoalReached -= OnGoalReached;
+}
+
+private void OnGoalReached()
+{
+    goalReached = true;
+}
+
+// HUD: informasi generasi, tombol seed, pesan goal
+private void OnGUI()
+{
+    GUILayout.BeginArea(
+        new Rect(10, 10, 300, 330),
+        GUI.skin.box
+    );
+
+    GUILayout.Label("Seed: " + seed +
+                    (usedSeed != seed ? " (dipakai: " + usedSeed + ")" : ""));
+    GUILayout.Label("Ukuran peta: " + mapWidth + " x " + mapHeight);
+    GUILayout.Label("Room: " + rooms.Count);
+    GUILayout.Label("Floor tile: " + floorTileCount);
+    GUILayout.Label("Panjang jalur start-goal: " +
+                    (pathLength >= 0 ? pathLength + " tile" : "-"));
+    GUILayout.Label("Percobaan generate: " + attemptsUsed +
+                    " / " + maxGenerateAttempts);
+    GUILayout.Label("Enemy: " + enemyPositions.Count +
+                    "   Item: " + itemPositions.Count);
+    GUILayout.Label("Validasi: " + (dungeonValid ? "Valid" : statusMessage));
+
+    GUILayout.Space(6);
+
+    if (GUILayout.Button("Prev Seed (T)"))
+    {
+        PreviousSeed();
+    }
+
+    if (GUILayout.Button("Next Seed (R)"))
+    {
+        NextSeed();
+    }
+
+    GUILayout.EndArea();
+
+    if (!dungeonValid)
+    {
+        DrawCenterMessage(statusMessage, Color.red);
+    }
+    else if (goalReached)
+    {
+        DrawCenterMessage("Goal tercapai", Color.green);
+    }
+}
+
+private void DrawCenterMessage(string message, Color color)
+{
+    GUIStyle style = new GUIStyle(GUI.skin.label);
+
+    style.fontSize = 36;
+    style.fontStyle = FontStyle.Bold;
+    style.alignment = TextAnchor.MiddleCenter;
+    style.normal.textColor = color;
+
+    GUI.Label(
+        new Rect(0, Screen.height * 0.4f, Screen.width, 80),
+        message,
+        style
+    );
 }
 
 private void Update()
